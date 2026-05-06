@@ -4,6 +4,10 @@ import { supabase } from './lib/supabase'
 function App() {
   const [units, setUnits] = useState([])
   const [loading, setLoading] = useState(true)
+  
+  // New state variables for our form
+  const [newUnitNumber, setNewUnitNumber] = useState('')
+  const [newBaseRent, setNewBaseRent] = useState('')
 
   useEffect(() => {
     fetchUnits()
@@ -11,15 +15,10 @@ function App() {
 
   const fetchUnits = async () => {
     try {
-      // Fetch units and join the property name from the properties table
       const { data, error } = await supabase
         .from('units')
-        .select(`
-          *,
-          properties (
-            name
-          )
-        `)
+        .select(`*, properties(name)`)
+        .order('unit_number', { ascending: true }) // Keeps them in alphabetical order!
       
       if (error) throw error
       setUnits(data)
@@ -30,6 +29,44 @@ function App() {
     }
   }
 
+  // The function that runs when you click submit
+  const handleAddUnit = async (e) => {
+    e.preventDefault()
+    
+    // We need the property_id for Alkapuri to link the new unit. 
+    // We'll grab it from the first unit currently in our list.
+    const alkapuriId = units.length > 0 ? units[0].property_id : null
+    
+    if (!alkapuriId || !newUnitNumber || !newBaseRent) {
+      alert("Please fill out all fields!")
+      return
+    }
+
+    try {
+      const { error } = await supabase
+        .from('units')
+        .insert([
+          { 
+            property_id: alkapuriId, 
+            unit_number: newUnitNumber, 
+            base_rent: newBaseRent,
+            is_occupied: false // Defaults to vacant
+          }
+        ])
+
+      if (error) throw error
+      
+      // Clear the form and refresh the grid!
+      setNewUnitNumber('')
+      setNewBaseRent('')
+      fetchUnits()
+      
+    } catch (error) {
+      console.error("Error adding unit:", error.message)
+      alert("Failed to add unit. Check console.")
+    }
+  }
+
   return (
     <div className="min-h-screen bg-yvv-charcoalDark text-gray-200 p-8">
       <header className="mb-10 border-b border-yvv-charcoal pb-4">
@@ -37,6 +74,40 @@ function App() {
         <p className="text-sm text-gray-400 mt-1">Property Management Dashboard</p>
       </header>
 
+      {/* --- NEW: The Add Unit Form --- */}
+      <div className="bg-yvv-charcoal p-6 rounded-lg border border-gray-800 mb-8 shadow-lg">
+        <h2 className="text-xl font-bold text-white mb-4">Add New Unit to Alkapuri</h2>
+        <form onSubmit={handleAddUnit} className="flex gap-4 items-end">
+          <div className="flex-1">
+            <label className="block text-xs text-yvv-cyan uppercase tracking-wider mb-2">Unit Number</label>
+            <input 
+              type="text" 
+              placeholder="e.g. Flat 104"
+              value={newUnitNumber}
+              onChange={(e) => setNewUnitNumber(e.target.value)}
+              className="w-full bg-yvv-charcoalDark border border-gray-700 rounded p-2 text-white focus:outline-none focus:border-yvv-cyan"
+            />
+          </div>
+          <div className="flex-1">
+            <label className="block text-xs text-yvv-cyan uppercase tracking-wider mb-2">Base Rent (₹)</label>
+            <input 
+              type="number" 
+              placeholder="e.g. 15000"
+              value={newBaseRent}
+              onChange={(e) => setNewBaseRent(e.target.value)}
+              className="w-full bg-yvv-charcoalDark border border-gray-700 rounded p-2 text-white focus:outline-none focus:border-yvv-cyan"
+            />
+          </div>
+          <button 
+            type="submit"
+            className="px-6 py-2 bg-yvv-charcoalDark border border-yvv-cyan text-yvv-cyan rounded hover:bg-yvv-cyan hover:text-yvv-charcoalDark transition-all font-semibold h-[42px]"
+          >
+            + Add Unit
+          </button>
+        </form>
+      </div>
+
+      {/* --- The Grid (Same as yesterday) --- */}
       {loading ? (
         <div className="flex justify-center items-center h-40">
           <p className="text-yvv-cyan animate-pulse">Loading properties...</p>
