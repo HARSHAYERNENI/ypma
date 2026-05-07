@@ -3,7 +3,7 @@ import { supabase } from './lib/supabase'
 import { BrowserRouter as Router, Routes, Route, Link, useParams, useNavigate } from 'react-router-dom'
 
 // ==========================================
-// 1. THE MAIN DASHBOARD PAGE (Unchanged)
+// 1. THE MAIN DASHBOARD PAGE
 // ==========================================
 function Dashboard() {
   const [units, setUnits] = useState([])
@@ -68,36 +68,20 @@ function Dashboard() {
   return (
     <div className="min-h-screen bg-yvv-charcoalDark text-gray-200 p-8 font-sans">
       <header className="mb-8 border-b border-yvv-charcoal pb-4 flex justify-between items-end">
-        <div>
-          <h1 className="text-3xl font-bold text-yvv-cyan tracking-widest">YPMA</h1>
-          <p className="text-sm text-gray-400 mt-1">Tenant Management Portal</p>
-        </div>
-        <Link to="/water" className="px-6 py-2 bg-yvv-cyan text-yvv-charcoalDark font-bold rounded shadow-[0_0_15px_rgba(34,211,238,0.3)] hover:brightness-110 transition-all">
-          💧 Water Billing Portal
-        </Link>
+        <div><h1 className="text-3xl font-bold text-yvv-cyan tracking-widest">YPMA</h1><p className="text-sm text-gray-400 mt-1">Tenant Management Portal</p></div>
+        <Link to="/water" className="px-6 py-2 bg-yvv-cyan text-yvv-charcoalDark font-bold rounded shadow-[0_0_15px_rgba(34,211,238,0.3)] hover:brightness-110 transition-all">💧 Water Billing Portal</Link>
       </header>
 
       {!loading && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          <div className="bg-yvv-charcoal p-6 rounded-lg border border-gray-800 shadow-lg">
-            <p className="text-gray-400 text-sm uppercase tracking-wider mb-1">Total Monthly Revenue</p>
-            <h2 className="text-3xl font-bold text-white">₹{monthlyRevenue.toLocaleString('en-IN')}</h2>
-          </div>
-          <div className="bg-yvv-charcoal p-6 rounded-lg border border-gray-800 shadow-lg">
-            <p className="text-gray-400 text-sm uppercase tracking-wider mb-1">Portfolio Occupancy</p>
-            <h2 className="text-3xl font-bold text-white">{occupiedUnits} <span className="text-lg text-gray-500 font-normal">/ {totalUnits} Units</span></h2>
-          </div>
-          <div className="bg-yvv-charcoal p-6 rounded-lg border border-red-900/50 shadow-lg">
-            <p className="text-gray-400 text-sm uppercase tracking-wider mb-1">Action Needed</p>
-            <h2 className="text-3xl font-bold text-red-400">{vacantUnits} <span className="text-lg text-gray-500 font-normal">Vacant</span></h2>
-          </div>
+          <div className="bg-yvv-charcoal p-6 rounded-lg border border-gray-800 shadow-lg"><p className="text-gray-400 text-sm uppercase tracking-wider mb-1">Total Monthly Revenue</p><h2 className="text-3xl font-bold text-white">₹{monthlyRevenue.toLocaleString('en-IN')}</h2></div>
+          <div className="bg-yvv-charcoal p-6 rounded-lg border border-gray-800 shadow-lg"><p className="text-gray-400 text-sm uppercase tracking-wider mb-1">Portfolio Occupancy</p><h2 className="text-3xl font-bold text-white">{occupiedUnits} <span className="text-lg text-gray-500 font-normal">/ {totalUnits} Units</span></h2></div>
+          <div className="bg-yvv-charcoal p-6 rounded-lg border border-red-900/50 shadow-lg"><p className="text-gray-400 text-sm uppercase tracking-wider mb-1">Action Needed</p><h2 className="text-3xl font-bold text-red-400">{vacantUnits} <span className="text-lg text-gray-500 font-normal">Vacant</span></h2></div>
         </div>
       )}
 
       <details className="bg-yvv-charcoal p-4 rounded-lg border border-gray-800 mb-8 shadow-lg cursor-pointer group">
-        <summary className="text-white font-bold list-none flex justify-between items-center outline-none">
-          <span>+ Add New Unit</span><span className="text-yvv-cyan group-open:rotate-45 transition-transform duration-300">✕</span>
-        </summary>
+        <summary className="text-white font-bold list-none flex justify-between items-center outline-none"><span>+ Add New Unit</span><span className="text-yvv-cyan group-open:rotate-45 transition-transform duration-300">✕</span></summary>
         <div className="mt-4 pt-4 border-t border-gray-800 cursor-default">
           <form onSubmit={handleAddUnit} className="flex flex-wrap gap-4 items-end">
             <div className="flex-1 min-w-[200px]"><label className="block text-xs text-yvv-cyan uppercase mb-2">Unit Number</label><input type="text" placeholder="Flat 105" value={newUnitNumber} onChange={(e) => setNewUnitNumber(e.target.value)} className="w-full bg-yvv-charcoalDark border border-gray-700 rounded p-2 text-white outline-none focus:border-yvv-cyan" /></div>
@@ -156,18 +140,16 @@ function Dashboard() {
 }
 
 // ==========================================
-// 2. THE WATER BILLING PAGE (Updated with Electricity & Database Save)
+// 2. THE WATER BILLING PAGE
 // ==========================================
 function WaterBilling() {
   const navigate = useNavigate()
   const [units, setUnits] = useState([])
   const [loading, setLoading] = useState(true)
-  
   const [billingMonth, setBillingMonth] = useState(new Date().toISOString().slice(0, 7))
   const [municipalBill, setMunicipalBill] = useState('')
   const [tankerCharges, setTankerCharges] = useState('')
-  const [electricityBill, setElectricityBill] = useState('') // DAY 10: New Field
-
+  const [electricityBill, setElectricityBill] = useState('')
   const [readings, setReadings] = useState({})
 
   useEffect(() => { fetchUnits() }, [])
@@ -175,137 +157,69 @@ function WaterBilling() {
   const fetchUnits = async () => {
     try {
       const { data, error } = await supabase.from('units').select('id, unit_number, current_tenant_name, property_id').eq('is_occupied', true).order('unit_number', { ascending: true })
-      if (error) throw error
-      setUnits(data)
-      
-      const initialReadings = {}
-      data.forEach(unit => {
-        initialReadings[unit.id] = { previous: 0, current: 0 }
-      })
-      setReadings(initialReadings)
+      if (error) throw error; setUnits(data); const initialReadings = {}; data.forEach(unit => { initialReadings[unit.id] = { previous: 0, current: 0 } }); setReadings(initialReadings)
     } catch (error) { console.error(error.message) } finally { setLoading(false) }
   }
 
-  const handleReadingChange = (unitId, field, value) => {
-    setReadings(prev => ({ ...prev, [unitId]: { ...prev[unitId], [field]: Number(value) || 0 } }))
-  }
-
-  // --- THE UPDATED MATH ENGINE ---
+  const handleReadingChange = (unitId, field, value) => { setReadings(prev => ({ ...prev, [unitId]: { ...prev[unitId], [field]: Number(value) || 0 } })) }
   const totalExpense = (Number(municipalBill) || 0) + (Number(tankerCharges) || 0) + (Number(electricityBill) || 0)
-  
-  let totalConsumption = 0
-  units.forEach(unit => {
-    const consumption = Math.max(0, readings[unit.id].current - readings[unit.id].previous)
-    totalConsumption += consumption
-  })
-
+  let totalConsumption = 0; units.forEach(unit => { totalConsumption += Math.max(0, readings[unit.id].current - readings[unit.id].previous) })
   const costPerUnit = totalConsumption > 0 ? (totalExpense / totalConsumption) : 0
 
-  // --- DAY 10: Save to Supabase Engine ---
   const handleSaveToDatabase = async () => {
-    const propertyId = units.length > 0 ? units[0].property_id : null;
-    if (!propertyId) return;
-
+    const propertyId = units.length > 0 ? units[0].property_id : null; if (!propertyId) return;
     try {
-      // 1. Save Building Totals
-      const { error: buildingError } = await supabase.from('building_water_bills').upsert({
-        property_id: propertyId,
-        billing_month: billingMonth,
-        municipal_bill: Number(municipalBill) || 0,
-        tanker_charges: Number(tankerCharges) || 0,
-        electricity_bill: Number(electricityBill) || 0,
-        total_building_units: totalConsumption,
-        cost_per_unit: costPerUnit
-      }, { onConflict: 'property_id, billing_month' });
-
+      const { error: buildingError } = await supabase.from('building_water_bills').upsert({ property_id: propertyId, billing_month: billingMonth, municipal_bill: Number(municipalBill) || 0, tanker_charges: Number(tankerCharges) || 0, electricity_bill: Number(electricityBill) || 0, total_building_units: totalConsumption, cost_per_unit: costPerUnit }, { onConflict: 'property_id, billing_month' });
       if (buildingError) throw buildingError;
-
-      // 2. Save Individual Flat Bills
       const unitPromises = units.map(unit => {
-        const prev = readings[unit.id]?.previous || 0;
-        const curr = readings[unit.id]?.current || 0;
-        const consumption = Math.max(0, curr - prev);
-        const flatBill = consumption * costPerUnit;
-
-        return supabase.from('unit_water_readings').upsert({
-          unit_id: unit.id,
-          billing_month: billingMonth,
-          previous_reading: prev,
-          current_reading: curr,
-          unit_consumption: consumption,
-          flat_bill_amount: flatBill
-        }, { onConflict: 'unit_id, billing_month' });
+        const prev = readings[unit.id]?.previous || 0; const curr = readings[unit.id]?.current || 0; const consumption = Math.max(0, curr - prev); const flatBill = consumption * costPerUnit;
+        return supabase.from('unit_water_readings').upsert({ unit_id: unit.id, billing_month: billingMonth, previous_reading: prev, current_reading: curr, unit_consumption: consumption, flat_bill_amount: flatBill }, { onConflict: 'unit_id, billing_month' });
       });
-
-      await Promise.all(unitPromises);
-      alert("✅ All water readings and bills successfully saved to the database!");
-    } catch (error) {
-      alert("Error saving data: " + error.message);
-    }
+      await Promise.all(unitPromises); alert("✅ All water readings saved!");
+    } catch (error) { alert("Error saving data: " + error.message); }
   }
 
   return (
     <div className="min-h-screen bg-yvv-charcoalDark text-gray-200 p-8 font-sans pb-24">
       <div className="max-w-6xl mx-auto">
         <button onClick={() => navigate('/')} className="text-gray-400 hover:text-yvv-cyan transition-colors mb-6 flex items-center gap-2 font-semibold"><span>←</span> Back to Dashboard</button>
-
         <h1 className="text-3xl font-bold text-white mb-8 border-b border-gray-700 pb-4">WATER READING & BILLING</h1>
-
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* LEFT SIDE: Overview */}
           <div className="col-span-1 bg-yvv-charcoal p-6 rounded-xl border border-gray-800 shadow-lg h-fit sticky top-8">
-            <h2 className="text-xs text-gray-400 uppercase tracking-widest border-b border-gray-700 pb-2 mb-4 font-bold">Property Overview & Costs</h2>
+            <h2 className="text-xs text-gray-400 uppercase tracking-widest border-b border-gray-700 pb-2 mb-4 font-bold">Overview</h2>
             <div className="space-y-6">
-              <div><p className="text-sm text-gray-400">BUILDING:</p><p className="text-xl text-white font-bold tracking-wider">ALKAPURI APARTMENTS</p></div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="bg-yvv-charcoalDark p-4 rounded border border-gray-700"><p className="text-xs text-gray-400 uppercase">Total Cost:</p><p className="text-2xl text-red-400 font-bold">₹{totalExpense.toLocaleString('en-IN')}</p></div>
                 <div className="bg-yvv-charcoalDark p-4 rounded border border-gray-700"><p className="text-xs text-gray-400 uppercase">Unit Cost (C):</p><p className="text-2xl text-yvv-cyan font-bold">₹{costPerUnit.toFixed(2)}<span className="text-sm text-gray-500 font-normal">/u</span></p></div>
               </div>
               <div className="grid grid-cols-2 gap-4 border-t border-gray-700 pt-6">
-                <div><p className="text-xs text-gray-400 uppercase">Total Units Consumed:</p><p className="text-2xl text-white font-bold">{totalConsumption} <span className="text-sm text-gray-500 font-normal">u</span></p></div>
-                <div><p className="text-xs text-gray-400 uppercase">Calculation Month:</p><input type="month" value={billingMonth} onChange={(e) => setBillingMonth(e.target.value)} className="bg-transparent text-white font-bold outline-none border-b border-yvv-cyan w-full mt-1" /></div>
+                <div><p className="text-xs text-gray-400 uppercase">Total Consumed:</p><p className="text-2xl text-white font-bold">{totalConsumption} u</p></div>
+                <div><p className="text-xs text-gray-400 uppercase">Month:</p><input type="month" value={billingMonth} onChange={(e) => setBillingMonth(e.target.value)} className="bg-transparent text-white font-bold outline-none border-b border-yvv-cyan w-full mt-1" /></div>
               </div>
             </div>
           </div>
-
-          {/* RIGHT SIDE: Entry */}
           <div className="col-span-1 lg:col-span-2 space-y-6">
-            {/* Calculator Input */}
             <div className="bg-yvv-charcoal p-6 rounded-xl border border-yvv-cyan shadow-[0_0_15px_rgba(34,211,238,0.1)]">
               <h2 className="text-xs text-yvv-cyan uppercase tracking-widest mb-4 font-bold">Building Calculator Input</h2>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
-                <div><label className="block text-sm text-gray-400 mb-1">Municipal Bill (₹)</label><input type="number" placeholder="20000" value={municipalBill} onChange={(e) => setMunicipalBill(e.target.value)} className="w-full bg-yvv-charcoalDark border border-gray-700 rounded p-3 text-white outline-none focus:border-yvv-cyan" /></div>
-                <div><label className="block text-sm text-gray-400 mb-1">Tanker Charges (₹)</label><input type="number" placeholder="10000" value={tankerCharges} onChange={(e) => setTankerCharges(e.target.value)} className="w-full bg-yvv-charcoalDark border border-gray-700 rounded p-3 text-white outline-none focus:border-yvv-cyan" /></div>
-                <div><label className="block text-sm text-yvv-cyan font-bold mb-1">Motor/Electricity (₹)</label><input type="number" placeholder="1000" value={electricityBill} onChange={(e) => setElectricityBill(e.target.value)} className="w-full bg-yvv-charcoalDark border border-yvv-cyan rounded p-3 text-white outline-none" /></div>
+                <div><label className="block text-sm text-gray-400 mb-1">Municipal Bill (₹)</label><input type="number" value={municipalBill} onChange={(e) => setMunicipalBill(e.target.value)} className="w-full bg-yvv-charcoalDark border border-gray-700 rounded p-3 text-white outline-none focus:border-yvv-cyan" /></div>
+                <div><label className="block text-sm text-gray-400 mb-1">Tanker Charges (₹)</label><input type="number" value={tankerCharges} onChange={(e) => setTankerCharges(e.target.value)} className="w-full bg-yvv-charcoalDark border border-gray-700 rounded p-3 text-white outline-none focus:border-yvv-cyan" /></div>
+                <div><label className="block text-sm text-yvv-cyan font-bold mb-1">Motor/Elec (₹)</label><input type="number" value={electricityBill} onChange={(e) => setElectricityBill(e.target.value)} className="w-full bg-yvv-charcoalDark border border-yvv-cyan rounded p-3 text-white outline-none" /></div>
               </div>
             </div>
-
-            {/* Units Table */}
             <div className="bg-yvv-charcoal rounded-xl border border-gray-800 overflow-hidden shadow-lg">
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="bg-gray-800/50 border-b border-gray-700 text-xs text-gray-400 uppercase tracking-wider">
-                      <th className="p-4 font-semibold">Unit</th><th className="p-4 font-semibold">Tenant</th><th className="p-4 font-semibold text-right">Previous (u)</th><th className="p-4 font-semibold text-right">Current (u)</th><th className="p-4 font-semibold text-center bg-gray-800">Consumption</th><th className="p-4 font-semibold text-right bg-gray-800">Calculated Bill</th>
-                    </tr>
-                  </thead>
+                  <thead><tr className="bg-gray-800/50 border-b border-gray-700 text-xs text-gray-400 uppercase tracking-wider"><th className="p-4">Unit</th><th className="p-4">Prev</th><th className="p-4">Curr</th><th className="p-4 bg-gray-800">Bill</th></tr></thead>
                   <tbody>
-                    {loading ? (
-                      <tr><td colSpan="6" className="p-8 text-center text-yvv-cyan animate-pulse">Loading Units...</td></tr>
-                    ) : units.map((unit) => {
-                      const prev = readings[unit.id]?.previous || 0;
-                      const curr = readings[unit.id]?.current || 0;
-                      const consumption = Math.max(0, curr - prev);
-                      const bill = consumption * costPerUnit;
-
+                    {units.map((unit) => {
+                      const prev = readings[unit.id]?.previous || 0; const curr = readings[unit.id]?.current || 0; const bill = Math.max(0, curr - prev) * costPerUnit;
                       return (
-                        <tr key={unit.id} className="border-b border-gray-800 hover:bg-gray-800/30 transition-colors">
-                          <td className="p-4 font-bold text-white whitespace-nowrap">{unit.unit_number}</td>
-                          <td className="p-4 text-sm text-gray-400 max-w-[150px] truncate" title={unit.current_tenant_name}>{unit.current_tenant_name || 'Vacant'}</td>
-                          <td className="p-4"><input type="number" value={prev === 0 ? '' : prev} onChange={(e) => handleReadingChange(unit.id, 'previous', e.target.value)} className="w-full min-w-[80px] bg-transparent border-b border-gray-700 text-right text-white p-1 focus:border-yvv-cyan outline-none" /></td>
-                          <td className="p-4"><input type="number" value={curr === 0 ? '' : curr} onChange={(e) => handleReadingChange(unit.id, 'current', e.target.value)} className="w-full min-w-[80px] bg-yvv-charcoalDark border border-gray-600 rounded text-right text-white p-2 focus:border-yvv-cyan outline-none" /></td>
-                          <td className="p-4 text-center font-bold text-gray-300 bg-gray-800/20">{consumption}</td>
-                          <td className="p-4 text-right font-bold text-yvv-cyan bg-gray-800/20">₹{Math.round(bill).toLocaleString('en-IN')}</td>
+                        <tr key={unit.id} className="border-b border-gray-800">
+                          <td className="p-4 text-white font-bold">{unit.unit_number}</td>
+                          <td className="p-4"><input type="number" value={prev===0?'':prev} onChange={(e) => handleReadingChange(unit.id, 'previous', e.target.value)} className="w-20 bg-transparent border-b border-gray-700 text-white outline-none" /></td>
+                          <td className="p-4"><input type="number" value={curr===0?'':curr} onChange={(e) => handleReadingChange(unit.id, 'current', e.target.value)} className="w-20 bg-yvv-charcoalDark border border-gray-600 rounded p-1 text-white outline-none" /></td>
+                          <td className="p-4 font-bold text-yvv-cyan bg-gray-800/20">₹{Math.round(bill)}</td>
                         </tr>
                       )
                     })}
@@ -313,13 +227,7 @@ function WaterBilling() {
                 </table>
               </div>
             </div>
-            
-            {/* Save Button */}
-            <div className="flex justify-end pt-4">
-               <button onClick={handleSaveToDatabase} className="px-8 py-3 bg-green-500 text-white font-bold rounded-lg shadow-[0_0_15px_rgba(34,197,94,0.3)] hover:bg-green-400 transition-all">
-                 Save All Readings to Database
-               </button>
-            </div>
+            <div className="flex justify-end pt-4"><button onClick={handleSaveToDatabase} className="px-8 py-3 bg-green-500 text-white font-bold rounded-lg hover:bg-green-400">Save All Readings</button></div>
           </div>
         </div>
       </div>
@@ -328,7 +236,7 @@ function WaterBilling() {
 }
 
 // ==========================================
-// 3. FLAT PROFILE PAGE (Updated Ledger Pull)
+// 3. FLAT PROFILE PAGE (DAY 11: MOCKUP + HISTORY)
 // ==========================================
 function UnitDetail() {
   const { id } = useParams()
@@ -336,151 +244,283 @@ function UnitDetail() {
   const [unit, setUnit] = useState(null)
   const [loading, setLoading] = useState(true)
 
-  const [isEditingFinancials, setIsEditingFinancials] = useState(false)
-  const [editRent, setEditRent] = useState('')
-  const [editMaintenance, setEditMaintenance] = useState('')
-  const [isEditingTenant, setIsEditingTenant] = useState(false)
-  const [editTenantName, setEditTenantName] = useState('')
-  const [editEscalationDate, setEditEscalationDate] = useState('')
+  // Edit States
+  const [editMode, setEditMode] = useState({ tenant: false, tech: false, financial: false })
+  const [formData, setFormData] = useState({})
 
+  // Ledger States
   const [paymentMonth, setPaymentMonth] = useState(new Date().toISOString().slice(0, 7))
   const [payments, setPayments] = useState({ rent_paid: false, maintenance_paid: false, water_paid: false })
-  
-  // Auto-Fill Water Bill State
   const [waterCost, setWaterCost] = useState('Variable')
 
-  useEffect(() => { fetchUnit() }, [id])
+  // --- DAY 11: History States ---
+  const [tenantHistory, setTenantHistory] = useState([])
 
-  useEffect(() => {
-    if (unit) {
-      fetchPayments()
-      fetchWaterBill() 
-    }
+  useEffect(() => { 
+    fetchUnit()
+    fetchTenantHistory() 
+  }, [id])
+
+  useEffect(() => { 
+    if (unit) { fetchPayments(); fetchWaterBill() } 
   }, [id, paymentMonth, unit])
 
   const fetchUnit = async () => {
     try {
       const { data, error } = await supabase.from('units').select('*, properties(name)').eq('id', id).single()
       if (error) throw error
-      setUnit(data); setEditRent(data.base_rent); setEditMaintenance(data.maintenance_fee)
-      setEditTenantName(data.current_tenant_name || ''); setEditEscalationDate(data.rent_escalation_date || '')
+      setUnit(data)
+      setFormData({
+        tenantName: data.current_tenant_name || '',
+        phone: data.phone_number || '',
+        escalation: data.rent_escalation_date || '',
+        keyNo: data.key_number || '',
+        electricMeter: data.electric_meter_number || '',
+        ptin: data.ptin || '',
+        rent: data.base_rent || '',
+        maintenance: data.maintenance_fee || '',
+        advance: data.advance_amount || ''
+      })
     } catch (error) { console.error(error.message) } finally { setLoading(false) }
+  }
+
+  // --- DAY 11: FETCH TENANT HISTORY ---
+  const fetchTenantHistory = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('tenant_history')
+        .select('*')
+        .eq('unit_id', id)
+        .order('move_out_date', { ascending: false })
+      if (error) throw error
+      setTenantHistory(data)
+    } catch (error) { console.error("Error fetching history:", error.message) }
+  }
+
+  // --- DAY 11: UPDATED ARCHIVE LOGIC ---
+  const handleArchiveTenant = async () => {
+    if (!unit.current_tenant_name) return alert("No active tenant to archive!")
+    if (!window.confirm(`Are you sure you want to archive ${unit.current_tenant_name} and reset this flat?`)) return
+
+    try {
+      // 1. Move to History Vault
+      const { error: historyError } = await supabase.from('tenant_history').insert([{
+        unit_id: id,
+        tenant_name: unit.current_tenant_name,
+        phone_number: unit.phone_number // Passed perfectly!
+      }])
+      if (historyError) throw historyError
+
+      // 2. Wipe the Flat Clean
+      const { error: wipeError } = await supabase.from('units').update({
+        current_tenant_name: null,
+        phone_number: null,
+        advance_amount: 0,
+        rent_escalation_date: null,
+        is_occupied: false
+      }).eq('id', id)
+      if (wipeError) throw wipeError
+
+      alert("Tenant archived successfully. The unit is now vacant.")
+      fetchUnit() // Refresh current flat data
+      fetchTenantHistory() // Refresh the history list
+    } catch (error) { alert("Error archiving tenant: " + error.message) }
+  }
+
+  const handleSave = async (section) => {
+    try {
+      let updateData = {}
+      if (section === 'tenant') {
+        updateData = { current_tenant_name: formData.tenantName, phone_number: formData.phone, rent_escalation_date: formData.escalation || null, is_occupied: formData.tenantName.length > 0 }
+      } else if (section === 'tech') {
+        updateData = { key_number: formData.keyNo, electric_meter_number: formData.electricMeter, ptin: formData.ptin }
+      } else if (section === 'financial') {
+        updateData = { base_rent: formData.rent, maintenance_fee: formData.maintenance, advance_amount: formData.advance }
+      }
+
+      await supabase.from('units').update(updateData).eq('id', id)
+      setEditMode({ ...editMode, [section]: false })
+      fetchUnit()
+    } catch (error) { alert(error.message) }
   }
 
   const fetchPayments = async () => {
     try {
-      const { data, error } = await supabase.from('payments').select('*').eq('unit_id', id).eq('payment_month', paymentMonth).single()
+      const { data } = await supabase.from('payments').select('*').eq('unit_id', id).eq('payment_month', paymentMonth).single()
       if (data) setPayments({ rent_paid: data.rent_paid, maintenance_paid: data.maintenance_paid, water_paid: data.water_paid })
       else setPayments({ rent_paid: false, maintenance_paid: false, water_paid: false })
     } catch (error) { setPayments({ rent_paid: false, maintenance_paid: false, water_paid: false }) }
   }
 
-  // --- DAY 10: Updated Fetch logic to pull from the new table ---
   const fetchWaterBill = async () => {
     try {
-      const { data, error } = await supabase
-        .from('unit_water_readings')
-        .select('flat_bill_amount')
-        .eq('unit_id', id)
-        .eq('billing_month', paymentMonth) 
-        .single()
-      
+      const { data } = await supabase.from('unit_water_readings').select('flat_bill_amount').eq('unit_id', id).eq('billing_month', paymentMonth).single()
       if (data) setWaterCost(Math.round(data.flat_bill_amount))
       else setWaterCost('Variable')
     } catch (err) { setWaterCost('Variable') }
   }
 
   const handleTogglePayment = async (field) => {
-    const updatedPayments = { ...payments, [field]: !payments[field] }
-    setPayments(updatedPayments)
-    try {
-      await supabase.from('payments').upsert({ unit_id: id, payment_month: paymentMonth, rent_paid: updatedPayments.rent_paid, maintenance_paid: updatedPayments.maintenance_paid, water_paid: updatedPayments.water_paid }, { onConflict: 'unit_id, payment_month' })
-    } catch (error) { fetchPayments() }
-  }
-
-  const handleSaveFinancials = async () => {
-    try { await supabase.from('units').update({ base_rent: editRent, maintenance_fee: editMaintenance }).eq('id', id); setIsEditingFinancials(false); fetchUnit() } catch (error) { alert(error.message) }
-  }
-  const handleSaveTenant = async () => {
-    try { await supabase.from('units').update({ current_tenant_name: editTenantName, rent_escalation_date: editEscalationDate || null, is_occupied: editTenantName.length > 0 }).eq('id', id); setIsEditingTenant(false); fetchUnit() } catch (error) { alert(error.message) }
+    const updatedPayments = { ...payments, [field]: !payments[field] }; setPayments(updatedPayments)
+    try { await supabase.from('payments').upsert({ unit_id: id, payment_month: paymentMonth, rent_paid: updatedPayments.rent_paid, maintenance_paid: updatedPayments.maintenance_paid, water_paid: updatedPayments.water_paid }, { onConflict: 'unit_id, payment_month' }) } catch (error) { fetchPayments() }
   }
 
   if (loading) return <div className="min-h-screen bg-yvv-charcoalDark flex justify-center items-center text-yvv-cyan">Loading...</div>
   if (!unit) return <div className="min-h-screen bg-yvv-charcoalDark flex justify-center items-center text-red-500">Unit not found.</div>
 
   return (
-    <div className="min-h-screen bg-yvv-charcoalDark text-gray-200 p-8 font-sans pb-24">
-      <div className="max-w-4xl mx-auto">
-        <button onClick={() => navigate('/')} className="text-gray-400 hover:text-yvv-cyan transition-colors mb-8 flex items-center gap-2 font-semibold"><span>←</span> Back to Dashboard</button>
+    <div className="min-h-screen bg-[#e5e7eb] text-gray-900 p-8 font-sans pb-24">
+      <div className="max-w-5xl mx-auto">
+        <button onClick={() => navigate('/')} className="text-gray-600 hover:text-black transition-colors mb-6 flex items-center gap-2 font-bold"><span>←</span> Back to Dashboard</button>
 
-        <header className="mb-10 flex justify-between items-end border-b border-yvv-charcoal pb-6">
-          <div><h1 className="text-5xl font-bold text-white mb-2">{unit.unit_number}</h1><p className="text-yvv-cyan uppercase tracking-widest text-sm">{unit.properties?.name}</p></div>
-          <div className={`px-4 py-2 rounded-full text-sm font-bold ${unit.is_occupied ? 'bg-green-900/50 text-green-400' : 'bg-red-900/50 text-red-400'}`}>{unit.is_occupied ? 'Occupied' : 'Vacant'}</div>
+        {/* MOCKUP HEADER */}
+        <header className="mb-6 bg-white p-6 rounded shadow-sm border-t-4 border-gray-400 flex justify-between items-start">
+          <div className="flex gap-6 items-center">
+             <div className="w-24 h-24 bg-gray-200 rounded flex items-center justify-center text-gray-400 text-2xl">🏢</div>
+             <div>
+               <p className="text-xs text-gray-500 uppercase font-bold tracking-widest">{unit.properties?.name}</p>
+               <h1 className="text-4xl font-bold text-gray-900 mb-1">FLAT {unit.unit_number}</h1>
+               <div className={`inline-block px-3 py-1 rounded text-xs font-bold ${unit.is_occupied ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                 {unit.is_occupied ? 'OCCUPIED' : 'VACANT'}
+               </div>
+             </div>
+          </div>
         </header>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
-          <div className="bg-yvv-charcoal p-6 rounded-xl border border-gray-800 shadow-lg">
-            <h2 className="text-xl font-bold text-white mb-6 border-b border-gray-700 pb-2">Tenant Information</h2>
-            {isEditingTenant ? (
-              <div className="space-y-4">
-                <div><label className="text-xs text-yvv-cyan uppercase">Name</label><input type="text" value={editTenantName} onChange={(e) => setEditTenantName(e.target.value)} className="w-full bg-yvv-charcoalDark border border-gray-700 rounded p-2 text-white" /></div>
-                <div><label className="text-xs text-yvv-cyan uppercase">Escalation Date</label><input type="date" value={editEscalationDate} onChange={(e) => setEditEscalationDate(e.target.value)} className="w-full bg-yvv-charcoalDark border border-gray-700 rounded p-2 text-white" /></div>
-                <div className="flex gap-2"><button onClick={handleSaveTenant} className="px-4 py-2 bg-yvv-cyan text-yvv-charcoalDark font-bold rounded">Save</button><button onClick={() => setIsEditingTenant(false)} className="text-gray-400">Cancel</button></div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+          {/* MOCKUP: TENANT DETAILS */}
+          <div className="col-span-1 md:col-span-2 bg-white p-6 rounded shadow-sm border border-gray-200">
+            <div className="flex justify-between items-center mb-4 border-b pb-2">
+              <h2 className="text-lg font-bold text-gray-800">Tenant Details</h2>
+              {!editMode.tenant && <button onClick={() => setEditMode({...editMode, tenant: true})} className="text-blue-600 text-sm hover:underline">✎ Edit</button>}
+            </div>
+            
+            {editMode.tenant ? (
+              <div className="space-y-3">
+                <input type="text" placeholder="Name" value={formData.tenantName} onChange={(e) => setFormData({...formData, tenantName: e.target.value})} className="w-full border rounded p-2 text-sm" />
+                <input type="text" placeholder="Phone" value={formData.phone} onChange={(e) => setFormData({...formData, phone: e.target.value})} className="w-full border rounded p-2 text-sm" />
+                <input type="date" value={formData.escalation} onChange={(e) => setFormData({...formData, escalation: e.target.value})} className="w-full border rounded p-2 text-sm" />
+                <div className="flex gap-2"><button onClick={() => handleSave('tenant')} className="px-4 py-2 bg-blue-600 text-white text-sm rounded font-bold">Save</button><button onClick={() => setEditMode({...editMode, tenant: false})} className="text-sm text-gray-500">Cancel</button></div>
               </div>
             ) : (
-              <div className="space-y-4">
-                <div><p className="text-gray-500 text-xs uppercase">Name</p><p className="text-lg text-white font-medium">{unit.current_tenant_name || 'No tenant assigned'}</p></div>
-                <div><p className="text-gray-500 text-xs uppercase">Escalation Date</p><p className="text-white">{unit.rent_escalation_date ? new Date(unit.rent_escalation_date).toLocaleDateString() : 'Not Set'}</p></div>
-                <div className="mt-6 pt-4 border-t border-gray-700"><button onClick={() => setIsEditingTenant(true)} className="text-yvv-cyan text-sm hover:underline font-semibold">Edit Tenant ✎</button></div>
+              <div className="flex justify-between items-center">
+                <div className="space-y-1">
+                  <p className="text-lg font-bold text-gray-900">{unit.current_tenant_name || 'No active tenant'}</p>
+                  <p className="text-sm text-gray-600">Phone: {unit.phone_number || 'N/A'}</p>
+                </div>
+                {unit.is_occupied && (
+                  <button onClick={handleArchiveTenant} className="px-4 py-2 bg-gray-100 border border-gray-300 rounded text-sm font-bold text-gray-700 hover:bg-red-50 hover:text-red-600 hover:border-red-300 transition-colors">
+                    Archive & Change Tenant
+                  </button>
+                )}
               </div>
             )}
           </div>
-          <div className="bg-yvv-charcoal p-6 rounded-xl border border-gray-800 shadow-lg">
-            <h2 className="text-xl font-bold text-white mb-6 border-b border-gray-700 pb-2">Financials</h2>
-            {isEditingFinancials ? (
-              <div className="space-y-4">
-                <div><label className="text-xs text-yvv-cyan uppercase">Base Rent (₹)</label><input type="number" value={editRent} onChange={(e) => setEditRent(e.target.value)} className="w-full bg-yvv-charcoalDark border border-gray-700 rounded p-2 text-white" /></div>
-                <div><label className="text-xs text-yvv-cyan uppercase">Maintenance Fee (₹)</label><input type="number" value={editMaintenance} onChange={(e) => setEditMaintenance(e.target.value)} className="w-full bg-yvv-charcoalDark border border-gray-700 rounded p-2 text-white" /></div>
-                <div className="flex gap-2"><button onClick={handleSaveFinancials} className="px-4 py-2 bg-yvv-cyan text-yvv-charcoalDark font-bold rounded">Save</button><button onClick={() => setIsEditingFinancials(false)} className="text-gray-400">Cancel</button></div>
+
+          {/* MOCKUP: TECHNICAL INFO */}
+          <div className="col-span-1 bg-white p-6 rounded shadow-sm border border-gray-200">
+            <div className="flex justify-between items-center mb-4 border-b pb-2">
+              <h2 className="text-lg font-bold text-gray-800">Technical Info</h2>
+              {!editMode.tech && <button onClick={() => setEditMode({...editMode, tech: true})} className="text-blue-600 text-sm hover:underline">✎ Edit</button>}
+            </div>
+
+            {editMode.tech ? (
+              <div className="space-y-3">
+                <input type="text" placeholder="Key No." value={formData.keyNo} onChange={(e) => setFormData({...formData, keyNo: e.target.value})} className="w-full border rounded p-2 text-sm" />
+                <input type="text" placeholder="Electric Meter No." value={formData.electricMeter} onChange={(e) => setFormData({...formData, electricMeter: e.target.value})} className="w-full border rounded p-2 text-sm" />
+                <input type="text" placeholder="PTIN (Tax ID)" value={formData.ptin} onChange={(e) => setFormData({...formData, ptin: e.target.value})} className="w-full border rounded p-2 text-sm" />
+                <div className="flex gap-2"><button onClick={() => handleSave('tech')} className="px-4 py-2 bg-blue-600 text-white text-sm rounded font-bold">Save</button><button onClick={() => setEditMode({...editMode, tech: false})} className="text-sm text-gray-500">Cancel</button></div>
               </div>
             ) : (
-              <div className="space-y-4">
-                <div><p className="text-gray-500 text-xs uppercase">Base Rent</p><p className="text-3xl text-white font-bold">₹{unit.base_rent}</p></div>
-                <div><p className="text-gray-500 text-xs uppercase">Maintenance Fee</p><p className="text-white text-lg">₹{unit.maintenance_fee}</p></div>
-                <div className="mt-6 pt-4 border-t border-gray-700"><button onClick={() => setIsEditingFinancials(true)} className="text-yvv-cyan text-sm hover:underline font-semibold">Edit Financials ✎</button></div>
+              <div className="space-y-2 text-sm text-gray-800">
+                <p><strong>Key No.:</strong> {unit.key_number || '-'}</p>
+                <p><strong>Meter No.:</strong> {unit.electric_meter_number || '-'}</p>
+                <p><strong>PTIN:</strong> {unit.ptin || '-'}</p>
               </div>
             )}
           </div>
         </div>
 
-        <div className="bg-yvv-charcoal p-8 rounded-xl border border-yvv-cyan shadow-[0_0_15px_rgba(34,211,238,0.1)]">
-          <div className="flex justify-between items-center mb-6 border-b border-gray-700 pb-4">
-            <h2 className="text-2xl font-bold text-white">Monthly Ledger</h2>
-            <input type="month" value={paymentMonth} onChange={(e) => setPaymentMonth(e.target.value)} className="bg-yvv-charcoalDark border border-gray-600 rounded p-2 text-yvv-cyan font-semibold outline-none focus:border-yvv-cyan" />
+        {/* MOCKUP: FINANCIALS & LEDGER */}
+        <div className="bg-white p-6 rounded shadow-sm border border-gray-200 mb-6">
+          <div className="flex justify-between items-center mb-4 border-b pb-2">
+             <h2 className="text-lg font-bold text-gray-800">Financials & Current Month Ledger</h2>
+             {!editMode.financial && <button onClick={() => setEditMode({...editMode, financial: true})} className="text-blue-600 text-sm hover:underline">✎ Edit Financials</button>}
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <label className={`flex items-center justify-between p-4 rounded-lg border cursor-pointer ${payments.rent_paid ? 'bg-green-900/30 border-green-500' : 'bg-yvv-charcoalDark border-gray-700'}`}>
-              <div className="flex flex-col"><span className={`font-bold ${payments.rent_paid ? 'text-green-400' : 'text-white'}`}>Base Rent</span><span className="text-sm text-gray-400">₹{unit.base_rent}</span></div>
-              <input type="checkbox" checked={payments.rent_paid} onChange={() => handleTogglePayment('rent_paid')} className="w-6 h-6 accent-green-500" />
-            </label>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div>
+              {editMode.financial ? (
+                <div className="space-y-3 bg-gray-50 p-4 rounded border">
+                  <div><label className="text-xs text-gray-500 font-bold">Monthly Rent</label><input type="number" value={formData.rent} onChange={(e) => setFormData({...formData, rent: e.target.value})} className="w-full border rounded p-2 text-sm" /></div>
+                  <div><label className="text-xs text-gray-500 font-bold">Maintenance</label><input type="number" value={formData.maintenance} onChange={(e) => setFormData({...formData, maintenance: e.target.value})} className="w-full border rounded p-2 text-sm" /></div>
+                  <div><label className="text-xs text-gray-500 font-bold">Advance Amount</label><input type="number" value={formData.advance} onChange={(e) => setFormData({...formData, advance: e.target.value})} className="w-full border rounded p-2 text-sm" /></div>
+                  <div className="flex gap-2 pt-2"><button onClick={() => handleSave('financial')} className="px-4 py-2 bg-blue-600 text-white text-sm rounded font-bold">Save</button><button onClick={() => setEditMode({...editMode, financial: false})} className="text-sm text-gray-500">Cancel</button></div>
+                </div>
+              ) : (
+                <div className="space-y-3 text-sm text-gray-800">
+                  <div className="flex justify-between border-b pb-1"><span className="text-gray-500 font-bold">Monthly Rent:</span> <span className="font-bold">₹{unit.base_rent}</span></div>
+                  <div className="flex justify-between border-b pb-1"><span className="text-gray-500 font-bold">Maintenance:</span> <span>₹{unit.maintenance_fee}</span></div>
+                  <div className="flex justify-between border-b pb-1"><span className="text-gray-500 font-bold">Water Bill (Current):</span> <span className="text-blue-600 font-bold">{waterCost === 'Variable' ? 'Variable' : `₹${waterCost}`}</span></div>
+                  <div className="flex justify-between"><span className="text-gray-500 font-bold">Advance Amount:</span> <span>₹{unit.advance_amount}</span></div>
+                </div>
+              )}
+            </div>
 
-            <label className={`flex items-center justify-between p-4 rounded-lg border cursor-pointer ${payments.maintenance_paid ? 'bg-green-900/30 border-green-500' : 'bg-yvv-charcoalDark border-gray-700'}`}>
-              <div className="flex flex-col"><span className={`font-bold ${payments.maintenance_paid ? 'text-green-400' : 'text-white'}`}>Maintenance</span><span className="text-sm text-gray-400">₹{unit.maintenance_fee}</span></div>
-              <input type="checkbox" checked={payments.maintenance_paid} onChange={() => handleTogglePayment('maintenance_paid')} className="w-6 h-6 accent-green-500" />
-            </label>
-
-            <label className={`flex items-center justify-between p-4 rounded-lg border cursor-pointer ${payments.water_paid ? 'bg-green-900/30 border-green-500' : 'bg-yvv-charcoalDark border-gray-700'}`}>
-              <div className="flex flex-col">
-                <span className={`font-bold ${payments.water_paid ? 'text-green-400' : 'text-white'}`}>Water Bill</span>
-                <span className={`text-sm font-bold ${waterCost === 'Variable' ? 'text-gray-400' : 'text-yvv-cyan'}`}>
-                  {waterCost === 'Variable' ? 'Variable' : `₹${waterCost}`}
-                </span>
-              </div>
-              <input type="checkbox" checked={payments.water_paid} onChange={() => handleTogglePayment('water_paid')} className="w-6 h-6 accent-green-500" />
-            </label>
+            <div>
+               <div className="flex justify-between items-center mb-2">
+                 <p className="text-xs font-bold text-gray-500 uppercase">Payment Status For:</p>
+                 <input type="month" value={paymentMonth} onChange={(e) => setPaymentMonth(e.target.value)} className="border rounded p-1 text-xs font-bold outline-none" />
+               </div>
+               
+               <div className="border rounded divide-y">
+                 <label className={`flex items-center p-3 cursor-pointer transition-colors ${payments.rent_paid ? 'bg-green-50' : 'hover:bg-gray-50'}`}>
+                   <input type="checkbox" checked={payments.rent_paid} onChange={() => handleTogglePayment('rent_paid')} className="w-4 h-4 mr-3 accent-green-600" />
+                   <span className={`text-sm font-bold ${payments.rent_paid ? 'text-green-800' : 'text-gray-700'}`}>Rent Paid (₹{unit.base_rent})</span>
+                 </label>
+                 <label className={`flex items-center p-3 cursor-pointer transition-colors ${payments.maintenance_paid ? 'bg-green-50' : 'hover:bg-gray-50'}`}>
+                   <input type="checkbox" checked={payments.maintenance_paid} onChange={() => handleTogglePayment('maintenance_paid')} className="w-4 h-4 mr-3 accent-green-600" />
+                   <span className={`text-sm font-bold ${payments.maintenance_paid ? 'text-green-800' : 'text-gray-700'}`}>Maintenance Paid (₹{unit.maintenance_fee})</span>
+                 </label>
+                 <label className={`flex items-center p-3 cursor-pointer transition-colors ${payments.water_paid ? 'bg-green-50' : 'hover:bg-gray-50'}`}>
+                   <input type="checkbox" checked={payments.water_paid} onChange={() => handleTogglePayment('water_paid')} className="w-4 h-4 mr-3 accent-green-600" />
+                   <span className={`text-sm font-bold ${payments.water_paid ? 'text-green-800' : 'text-gray-700'}`}>Water Bill Paid</span>
+                 </label>
+               </div>
+            </div>
           </div>
         </div>
+
+        {/* --- DAY 11: TENANT HISTORY DROPDOWN --- */}
+        <details className="bg-white p-4 rounded shadow-sm border border-gray-200 group cursor-pointer">
+          <summary className="text-gray-800 font-bold list-none flex justify-between items-center outline-none">
+            <span className="flex items-center gap-2">📜 Past Tenant History</span>
+            <span className="text-gray-400 group-open:rotate-180 transition-transform duration-300">▼</span>
+          </summary>
+          <div className="mt-4 pt-4 border-t border-gray-100 cursor-default">
+            {tenantHistory.length === 0 ? (
+              <p className="text-sm text-gray-500 italic text-center py-4">No past tenants recorded for this unit.</p>
+            ) : (
+              <div className="space-y-3">
+                {tenantHistory.map((history) => (
+                  <div key={history.id} className="flex justify-between items-center p-3 bg-gray-50 rounded border border-gray-100 text-sm">
+                    <div>
+                      <p className="font-bold text-gray-800">{history.tenant_name}</p>
+                      <p className="text-xs text-gray-500">📞 {history.phone_number || 'No phone recorded'}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xs text-gray-400 uppercase tracking-wider mb-1">Moved Out</p>
+                      <p className="font-bold text-gray-700">
+                        {new Date(history.move_out_date).toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' })}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </details>
+
       </div>
     </div>
   )
