@@ -3,7 +3,7 @@ import { supabase } from './lib/supabase'
 import { BrowserRouter as Router, Routes, Route, Link, useParams, useNavigate } from 'react-router-dom'
 
 // ==========================================
-// 1. THE DASHBOARD PAGE (Days 1-6)
+// 1. THE DASHBOARD PAGE (Unchanged from Day 8)
 // ==========================================
 function Dashboard() {
   const [units, setUnits] = useState([])
@@ -37,14 +37,12 @@ function Dashboard() {
   }
 
   const toggleOccupancy = async (id, currentStatus) => {
-    try { await supabase.from('units').update({ is_occupied: !currentStatus }).eq('id', id); fetchUnits() } 
-    catch (error) { alert(error.message) }
+    try { await supabase.from('units').update({ is_occupied: !currentStatus }).eq('id', id); fetchUnits() } catch (error) { alert(error.message) }
   }
 
   const deleteUnit = async (id) => {
     if (!window.confirm("Are you sure you want to delete this unit?")) return
-    try { await supabase.from('units').delete().eq('id', id); fetchUnits() } 
-    catch (error) { alert(error.message) }
+    try { await supabase.from('units').delete().eq('id', id); fetchUnits() } catch (error) { alert(error.message) }
   }
 
   const handleUpdateTenant = async (e) => {
@@ -170,7 +168,7 @@ function Dashboard() {
 }
 
 // ==========================================
-// 2. THE NEW FLAT PROFILE PAGE (Day 8: Interactive)
+// 2. THE NEW FLAT PROFILE PAGE (Day 9: Ledger added)
 // ==========================================
 function UnitDetail() {
   const { id } = useParams()
@@ -178,25 +176,33 @@ function UnitDetail() {
   const [unit, setUnit] = useState(null)
   const [loading, setLoading] = useState(true)
 
-  // --- DAY 8: Interactive Editing States ---
+  // Profile Editing States
   const [isEditingFinancials, setIsEditingFinancials] = useState(false)
   const [editRent, setEditRent] = useState('')
   const [editMaintenance, setEditMaintenance] = useState('')
-
   const [isEditingTenant, setIsEditingTenant] = useState(false)
   const [editTenantName, setEditTenantName] = useState('')
   const [editEscalationDate, setEditEscalationDate] = useState('')
 
+  // --- DAY 9: Payment Ledger States ---
+  // Defaults to the current month in 'YYYY-MM' format (e.g. '2026-05')
+  const [paymentMonth, setPaymentMonth] = useState(new Date().toISOString().slice(0, 7))
+  const [payments, setPayments] = useState({ rent_paid: false, maintenance_paid: false, water_paid: false })
+
   useEffect(() => {
     fetchUnit()
   }, [id])
+
+  // Watch for changes to the month selector and fetch the correct ledger
+  useEffect(() => {
+    fetchPayments()
+  }, [id, paymentMonth])
 
   const fetchUnit = async () => {
     try {
       const { data, error } = await supabase.from('units').select('*, properties(name)').eq('id', id).single()
       if (error) throw error
       setUnit(data)
-      // Pre-fill forms with current database data
       setEditRent(data.base_rent)
       setEditMaintenance(data.maintenance_fee)
       setEditTenantName(data.current_tenant_name || '')
@@ -204,28 +210,67 @@ function UnitDetail() {
     } catch (error) { console.error(error.message) } finally { setLoading(false) }
   }
 
-  // --- DAY 8: Save Functions ---
+  // --- DAY 9: Fetch Ledger Data ---
+  const fetchPayments = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('payments')
+        .select('*')
+        .eq('unit_id', id)
+        .eq('payment_month', paymentMonth)
+        .single() // We expect 1 record max due to UNIQUE constraint
+      
+      if (data) {
+        setPayments({ rent_paid: data.rent_paid, maintenance_paid: data.maintenance_paid, water_paid: data.water_paid })
+      } else {
+        // Reset to false if no record exists for this month yet
+        setPayments({ rent_paid: false, maintenance_paid: false, water_paid: false })
+      }
+    } catch (error) {
+      // Supabase throws a 'PGRST116' error if it finds 0 rows for a .single() request. We just ignore it and leave as false.
+      if (error.code !== 'PGRST116') console.error(error.message)
+      setPayments({ rent_paid: false, maintenance_paid: false, water_paid: false })
+    }
+  }
+
+  // --- DAY 9: Toggle Checkbox Logic (Upsert) ---
+  const handleTogglePayment = async (field) => {
+    // 1. Optimistic UI update (feels instant)
+    const newStatus = !payments[field]
+    const updatedPayments = { ...payments, [field]: newStatus }
+    setPayments(updatedPayments)
+
+    // 2. Save to database using 'upsert' (Update if exists, Insert if brand new)
+    try {
+      const { error } = await supabase.from('payments').upsert({
+        unit_id: id,
+        payment_month: paymentMonth,
+        rent_paid: updatedPayments.rent_paid,
+        maintenance_paid: updatedPayments.maintenance_paid,
+        water_paid: updatedPayments.water_paid
+      }, { onConflict: 'unit_id, payment_month' }) // This tells supabase how to check for existing rows
+
+      if (error) throw error
+    } catch (error) {
+      alert("Failed to save payment status.")
+      fetchPayments() // Revert UI if it failed
+    }
+  }
+
+  // Save Handlers for Profile Data
   const handleSaveFinancials = async () => {
     try {
-      const { error } = await supabase.from('units')
-        .update({ base_rent: editRent, maintenance_fee: editMaintenance }).eq('id', id)
+      const { error } = await supabase.from('units').update({ base_rent: editRent, maintenance_fee: editMaintenance }).eq('id', id)
       if (error) throw error
-      setIsEditingFinancials(false)
-      fetchUnit() // Refresh the local view
+      setIsEditingFinancials(false); fetchUnit()
     } catch (error) { alert(error.message) }
   }
 
   const handleSaveTenant = async () => {
     try {
-      const { error } = await supabase.from('units')
-        .update({ 
-          current_tenant_name: editTenantName, 
-          rent_escalation_date: editEscalationDate || null,
-          is_occupied: editTenantName.length > 0 
-        }).eq('id', id)
+      const { error } = await supabase.from('units').update({ current_tenant_name: editTenantName, rent_escalation_date: editEscalationDate || null, is_occupied: editTenantName.length > 0 }).eq('id', id)
       if (error) throw error
-      setIsEditingTenant(false)
-      fetchUnit()
+      setIsEditingTenant(false); fetchUnit()
     } catch (error) { alert(error.message) }
   }
 
@@ -233,7 +278,7 @@ function UnitDetail() {
   if (!unit) return <div className="min-h-screen bg-yvv-charcoalDark flex justify-center items-center text-red-500">Unit not found.</div>
 
   return (
-    <div className="min-h-screen bg-yvv-charcoalDark text-gray-200 p-8 font-sans">
+    <div className="min-h-screen bg-yvv-charcoalDark text-gray-200 p-8 font-sans pb-24">
       <div className="max-w-4xl mx-auto">
         <button onClick={() => navigate('/')} className="text-gray-400 hover:text-yvv-cyan transition-colors mb-8 flex items-center gap-2 font-semibold">
           <span>←</span> Back to Dashboard
@@ -249,77 +294,85 @@ function UnitDetail() {
           </div>
         </header>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-          {/* --- TENANT DETAILS CARD --- */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+          {/* Tenant Details Card (Unchanged) */}
           <div className="bg-yvv-charcoal p-6 rounded-xl border border-gray-800 shadow-lg">
             <h2 className="text-xl font-bold text-white mb-6 border-b border-gray-700 pb-2">Tenant Information</h2>
-            
             {isEditingTenant ? (
               <div className="space-y-4">
-                <div>
-                  <label className="block text-xs text-yvv-cyan uppercase mb-1">Name</label>
-                  <input type="text" value={editTenantName} onChange={(e) => setEditTenantName(e.target.value)} className="w-full bg-yvv-charcoalDark border border-gray-700 rounded p-2 text-white outline-none focus:border-yvv-cyan" />
-                </div>
-                <div>
-                  <label className="block text-xs text-yvv-cyan uppercase mb-1">Rent Escalation Date</label>
-                  <input type="date" value={editEscalationDate} onChange={(e) => setEditEscalationDate(e.target.value)} className="w-full bg-yvv-charcoalDark border border-gray-700 rounded p-2 text-white outline-none focus:border-yvv-cyan" />
-                </div>
-                <div className="flex gap-2 pt-2">
-                  <button onClick={handleSaveTenant} className="px-4 py-2 bg-yvv-cyan text-yvv-charcoalDark font-bold rounded text-sm hover:brightness-110">Save</button>
-                  <button onClick={() => setIsEditingTenant(false)} className="px-4 py-2 text-gray-400 hover:text-white text-sm">Cancel</button>
-                </div>
+                <div><label className="block text-xs text-yvv-cyan uppercase mb-1">Name</label><input type="text" value={editTenantName} onChange={(e) => setEditTenantName(e.target.value)} className="w-full bg-yvv-charcoalDark border border-gray-700 rounded p-2 text-white outline-none focus:border-yvv-cyan" /></div>
+                <div><label className="block text-xs text-yvv-cyan uppercase mb-1">Rent Escalation Date</label><input type="date" value={editEscalationDate} onChange={(e) => setEditEscalationDate(e.target.value)} className="w-full bg-yvv-charcoalDark border border-gray-700 rounded p-2 text-white outline-none focus:border-yvv-cyan" /></div>
+                <div className="flex gap-2 pt-2"><button onClick={handleSaveTenant} className="px-4 py-2 bg-yvv-cyan text-yvv-charcoalDark font-bold rounded text-sm">Save</button><button onClick={() => setIsEditingTenant(false)} className="px-4 py-2 text-gray-400 hover:text-white text-sm">Cancel</button></div>
               </div>
             ) : (
               <div className="space-y-4">
-                <div>
-                  <p className="text-gray-500 text-xs uppercase tracking-wider mb-1">Name</p>
-                  <p className="text-lg text-white font-medium">{unit.current_tenant_name || 'No tenant assigned'}</p>
-                </div>
-                <div>
-                  <p className="text-gray-500 text-xs uppercase tracking-wider mb-1">Rent Escalation Date</p>
-                  <p className="text-white">{unit.rent_escalation_date ? new Date(unit.rent_escalation_date).toLocaleDateString() : 'Not Set'}</p>
-                </div>
-                <div className="mt-6 pt-4 border-t border-gray-700">
-                  <button onClick={() => setIsEditingTenant(true)} className="text-yvv-cyan text-sm hover:underline font-semibold">Edit Tenant ✎</button>
-                </div>
+                <div><p className="text-gray-500 text-xs uppercase tracking-wider mb-1">Name</p><p className="text-lg text-white font-medium">{unit.current_tenant_name || 'No tenant assigned'}</p></div>
+                <div><p className="text-gray-500 text-xs uppercase tracking-wider mb-1">Rent Escalation Date</p><p className="text-white">{unit.rent_escalation_date ? new Date(unit.rent_escalation_date).toLocaleDateString() : 'Not Set'}</p></div>
+                <div className="mt-6 pt-4 border-t border-gray-700"><button onClick={() => setIsEditingTenant(true)} className="text-yvv-cyan text-sm hover:underline font-semibold">Edit Tenant ✎</button></div>
               </div>
             )}
           </div>
 
-          {/* --- FINANCIALS CARD --- */}
+          {/* Financials Card (Unchanged) */}
           <div className="bg-yvv-charcoal p-6 rounded-xl border border-gray-800 shadow-lg">
             <h2 className="text-xl font-bold text-white mb-6 border-b border-gray-700 pb-2">Financials</h2>
-            
             {isEditingFinancials ? (
               <div className="space-y-4">
-                <div>
-                  <label className="block text-xs text-yvv-cyan uppercase mb-1">Base Rent (₹)</label>
-                  <input type="number" value={editRent} onChange={(e) => setEditRent(e.target.value)} className="w-full bg-yvv-charcoalDark border border-gray-700 rounded p-2 text-white outline-none focus:border-yvv-cyan" />
-                </div>
-                <div>
-                  <label className="block text-xs text-yvv-cyan uppercase mb-1">Maintenance Fee (₹)</label>
-                  <input type="number" value={editMaintenance} onChange={(e) => setEditMaintenance(e.target.value)} className="w-full bg-yvv-charcoalDark border border-gray-700 rounded p-2 text-white outline-none focus:border-yvv-cyan" />
-                </div>
-                <div className="flex gap-2 pt-2">
-                  <button onClick={handleSaveFinancials} className="px-4 py-2 bg-yvv-cyan text-yvv-charcoalDark font-bold rounded text-sm hover:brightness-110">Save</button>
-                  <button onClick={() => setIsEditingFinancials(false)} className="px-4 py-2 text-gray-400 hover:text-white text-sm">Cancel</button>
-                </div>
+                <div><label className="block text-xs text-yvv-cyan uppercase mb-1">Base Rent (₹)</label><input type="number" value={editRent} onChange={(e) => setEditRent(e.target.value)} className="w-full bg-yvv-charcoalDark border border-gray-700 rounded p-2 text-white outline-none focus:border-yvv-cyan" /></div>
+                <div><label className="block text-xs text-yvv-cyan uppercase mb-1">Maintenance Fee (₹)</label><input type="number" value={editMaintenance} onChange={(e) => setEditMaintenance(e.target.value)} className="w-full bg-yvv-charcoalDark border border-gray-700 rounded p-2 text-white outline-none focus:border-yvv-cyan" /></div>
+                <div className="flex gap-2 pt-2"><button onClick={handleSaveFinancials} className="px-4 py-2 bg-yvv-cyan text-yvv-charcoalDark font-bold rounded text-sm">Save</button><button onClick={() => setIsEditingFinancials(false)} className="px-4 py-2 text-gray-400 hover:text-white text-sm">Cancel</button></div>
               </div>
             ) : (
               <div className="space-y-4">
-                <div>
-                  <p className="text-gray-500 text-xs uppercase tracking-wider mb-1">Base Rent</p>
-                  <p className="text-3xl text-white font-bold">₹{unit.base_rent}</p>
-                </div>
-                <div>
-                  <p className="text-gray-500 text-xs uppercase tracking-wider mb-1">Maintenance Fee</p>
-                  <p className="text-white text-lg">₹{unit.maintenance_fee}</p>
-                </div>
-                <div className="mt-6 pt-4 border-t border-gray-700">
-                  <button onClick={() => setIsEditingFinancials(true)} className="text-yvv-cyan text-sm hover:underline font-semibold">Edit Financials ✎</button>
-                </div>
+                <div><p className="text-gray-500 text-xs uppercase tracking-wider mb-1">Base Rent</p><p className="text-3xl text-white font-bold">₹{unit.base_rent}</p></div>
+                <div><p className="text-gray-500 text-xs uppercase tracking-wider mb-1">Maintenance Fee</p><p className="text-white text-lg">₹{unit.maintenance_fee}</p></div>
+                <div className="mt-6 pt-4 border-t border-gray-700"><button onClick={() => setIsEditingFinancials(true)} className="text-yvv-cyan text-sm hover:underline font-semibold">Edit Financials ✎</button></div>
               </div>
             )}
+          </div>
+        </div>
+
+        {/* --- DAY 9: MONTHLY LEDGER UI --- */}
+        <div className="bg-yvv-charcoal p-8 rounded-xl border border-yvv-cyan shadow-[0_0_15px_rgba(34,211,238,0.1)]">
+          <div className="flex justify-between items-center mb-6 border-b border-gray-700 pb-4">
+            <h2 className="text-2xl font-bold text-white">Monthly Ledger</h2>
+            <input 
+              type="month" 
+              value={paymentMonth}
+              onChange={(e) => setPaymentMonth(e.target.value)}
+              className="bg-yvv-charcoalDark border border-gray-600 rounded p-2 text-yvv-cyan font-semibold outline-none focus:border-yvv-cyan custom-month-picker"
+            />
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            
+            {/* Rent Checkbox */}
+            <label className={`flex items-center justify-between p-4 rounded-lg border cursor-pointer transition-all ${payments.rent_paid ? 'bg-green-900/30 border-green-500' : 'bg-yvv-charcoalDark border-gray-700 hover:border-gray-500'}`}>
+              <div className="flex flex-col">
+                <span className={`font-bold ${payments.rent_paid ? 'text-green-400' : 'text-white'}`}>Base Rent</span>
+                <span className="text-sm text-gray-400">₹{unit.base_rent}</span>
+              </div>
+              <input type="checkbox" checked={payments.rent_paid} onChange={() => handleTogglePayment('rent_paid')} className="w-6 h-6 accent-green-500" />
+            </label>
+
+            {/* Maintenance Checkbox */}
+            <label className={`flex items-center justify-between p-4 rounded-lg border cursor-pointer transition-all ${payments.maintenance_paid ? 'bg-green-900/30 border-green-500' : 'bg-yvv-charcoalDark border-gray-700 hover:border-gray-500'}`}>
+              <div className="flex flex-col">
+                <span className={`font-bold ${payments.maintenance_paid ? 'text-green-400' : 'text-white'}`}>Maintenance</span>
+                <span className="text-sm text-gray-400">₹{unit.maintenance_fee}</span>
+              </div>
+              <input type="checkbox" checked={payments.maintenance_paid} onChange={() => handleTogglePayment('maintenance_paid')} className="w-6 h-6 accent-green-500" />
+            </label>
+
+            {/* Water Checkbox */}
+            <label className={`flex items-center justify-between p-4 rounded-lg border cursor-pointer transition-all ${payments.water_paid ? 'bg-green-900/30 border-green-500' : 'bg-yvv-charcoalDark border-gray-700 hover:border-gray-500'}`}>
+              <div className="flex flex-col">
+                <span className={`font-bold ${payments.water_paid ? 'text-green-400' : 'text-white'}`}>Water Bill</span>
+                <span className="text-sm text-gray-400">Variable</span>
+              </div>
+              <input type="checkbox" checked={payments.water_paid} onChange={() => handleTogglePayment('water_paid')} className="w-6 h-6 accent-green-500" />
+            </label>
+
           </div>
         </div>
       </div>
