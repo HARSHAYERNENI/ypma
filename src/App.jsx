@@ -1,9 +1,76 @@
 import { useEffect, useState } from 'react'
 import { supabase } from './lib/supabase'
-import { BrowserRouter as Router, Routes, Route, Link, useParams, useNavigate } from 'react-router-dom'
+import { BrowserRouter as Router, Routes, Route, Link, useParams, useNavigate, Navigate } from 'react-router-dom'
 
 // ==========================================
-// 1. THE MAIN DASHBOARD PAGE (DAY 13: SMART DATES)
+// 0. AUTHENTICATION & SECURITY (DAY 14)
+// ==========================================
+function LoginScreen() {
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [isSignUp, setIsSignUp] = useState(false)
+
+  const handleAuth = async (e) => {
+    e.preventDefault()
+    setLoading(true)
+    try {
+      if (isSignUp) {
+        const { error } = await supabase.auth.signUp({ email, password })
+        if (error) throw error
+        alert("Account created successfully! You can now sign in.")
+        setIsSignUp(false)
+      } else {
+        const { error } = await supabase.auth.signInWithPassword({ email, password })
+        if (error) throw error
+      }
+    } catch (error) {
+      alert("Auth Error: " + error.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="min-h-screen bg-yvv-charcoalDark flex items-center justify-center p-4 font-sans">
+      <div className="w-full max-w-md bg-yvv-charcoal p-8 rounded-xl border border-gray-800 shadow-2xl">
+        <div className="text-center mb-8">
+          <h1 className="text-4xl font-bold text-yvv-cyan tracking-widest mb-2">YPMA</h1>
+          <p className="text-gray-400">Secure Property Management Portal</p>
+        </div>
+
+        <form onSubmit={handleAuth} className="space-y-6">
+          <div>
+            <label className="block text-xs text-yvv-cyan uppercase tracking-wider mb-2 font-bold">Admin Email</label>
+            <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} className="w-full bg-yvv-charcoalDark border border-gray-700 rounded p-3 text-white outline-none focus:border-yvv-cyan transition-colors" placeholder="admin@yerneni.com" />
+          </div>
+          <div>
+            <label className="block text-xs text-yvv-cyan uppercase tracking-wider mb-2 font-bold">Password</label>
+            <input type="password" required value={password} onChange={(e) => setPassword(e.target.value)} className="w-full bg-yvv-charcoalDark border border-gray-700 rounded p-3 text-white outline-none focus:border-yvv-cyan transition-colors" placeholder="••••••••" />
+          </div>
+          
+          <button type="submit" disabled={loading} className="w-full py-3 bg-yvv-cyan text-yvv-charcoalDark font-bold rounded-lg hover:brightness-110 transition-all shadow-[0_0_15px_rgba(34,211,238,0.2)] disabled:opacity-50">
+            {loading ? 'Authenticating...' : (isSignUp ? 'Create Account' : 'Secure Login')}
+          </button>
+        </form>
+
+        <div className="mt-6 text-center">
+          <button onClick={() => setIsSignUp(!isSignUp)} className="text-sm text-gray-500 hover:text-yvv-cyan transition-colors">
+            {isSignUp ? "Already have an account? Sign In" : "Need access? Create Account"}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ProtectedRoute({ session, children }) {
+  if (!session) return <Navigate to="/login" replace />
+  return children
+}
+
+// ==========================================
+// 1. THE MAIN DASHBOARD PAGE
 // ==========================================
 function Dashboard() {
   const [units, setUnits] = useState([])
@@ -14,7 +81,7 @@ function Dashboard() {
   const [newUnitNumber, setNewUnitNumber] = useState('')
   const [newBaseRent, setNewBaseRent] = useState('')
   const [tenantName, setTenantName] = useState('')
-  const [lastRentChangeDate, setLastRentChangeDate] = useState('') // ARCHITECTURE UPGRADE!
+  const [lastRentChangeDate, setLastRentChangeDate] = useState('')
 
   const [currentWaterBills, setCurrentWaterBills] = useState({})
 
@@ -71,25 +138,15 @@ function Dashboard() {
     } catch (error) { alert(error.message) }
   }
 
-  // --- DAY 13: THE SMART MATH ENGINE ---
-  // Calculates exactly 11 months AFTER the "Start Date"
   const getEscalationStatus = (unit) => {
     if (!unit.last_rent_change_date) return null;
-    
     const today = new Date(); today.setHours(0, 0, 0, 0);
     const lastChange = new Date(unit.last_rent_change_date);
-    
-    // Add 11 Months to the Start Date to find the Expiration!
     const expirationDate = new Date(lastChange.setMonth(lastChange.getMonth() + 11));
-    
     const diffDays = Math.ceil((expirationDate - today) / (1000 * 60 * 60 * 24));
     
     if (diffDays <= 30) {
-      return { 
-        status: diffDays < 0 ? 'overdue' : 'due_soon', 
-        days: Math.abs(diffDays),
-        expireDateStr: expirationDate.toLocaleDateString()
-      }
+      return { status: diffDays < 0 ? 'overdue' : 'due_soon', days: Math.abs(diffDays), expireDateStr: expirationDate.toLocaleDateString() }
     }
     return null;
   }
@@ -102,24 +159,16 @@ function Dashboard() {
     if (!window.confirm(`🚀 Renew Lease for ${unit.current_tenant_name}?\n\n1. Rent will increase by 10% (₹${currentRent} ➡️ ₹${newRent})\n2. Next Renewal will automatically be calculated 11 months from today.\n\nProceed?`)) return;
 
     try {
-      await supabase.from('units').update({
-        base_rent: newRent,
-        last_rent_change_date: today // WE ONLY UPDATE THIS FACT! Math handles the rest.
-      }).eq('id', unit.id);
-      
+      await supabase.from('units').update({ base_rent: newRent, last_rent_change_date: today }).eq('id', unit.id);
       alert(`✅ Success! Rent is now ₹${newRent} and the warning has been cleared.`);
       fetchUnits();
-    } catch (error) {
-      alert("Error renewing lease: " + error.message);
-    }
+    } catch (error) { alert("Error renewing lease: " + error.message); }
   }
 
   const totalUnits = units.length
   const occupiedUnits = units.filter(u => u.is_occupied).length
   const vacantUnits = totalUnits - occupiedUnits
   const monthlyRevenue = units.filter(u => u.is_occupied).reduce((sum, unit) => sum + (Number(unit.base_rent) || 0), 0)
-  
-  // Use the new smart engine for alerts
   const escalationAlerts = units.filter(u => u.is_occupied && getEscalationStatus(u) !== null)
 
   const displayedUnits = units.filter(unit => {
@@ -130,11 +179,21 @@ function Dashboard() {
     return true
   })
 
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+  }
+
   return (
     <div className="min-h-screen bg-yvv-charcoalDark text-gray-200 p-8 font-sans">
       <header className="mb-8 border-b border-yvv-charcoal pb-4 flex justify-between items-end">
-        <div><h1 className="text-3xl font-bold text-yvv-cyan tracking-widest">YPMA</h1><p className="text-sm text-gray-400 mt-1">Tenant Management Portal</p></div>
-        <Link to="/water" className="px-6 py-2 bg-yvv-cyan text-yvv-charcoalDark font-bold rounded shadow-[0_0_15px_rgba(34,211,238,0.3)] hover:brightness-110 transition-all">💧 Water Billing Portal</Link>
+        <div>
+          <h1 className="text-3xl font-bold text-yvv-cyan tracking-widest">YPMA</h1>
+          <p className="text-sm text-gray-400 mt-1">Tenant Management Portal</p>
+        </div>
+        <div className="flex gap-4 items-center">
+          <Link to="/water" className="px-6 py-2 bg-yvv-cyan text-yvv-charcoalDark font-bold rounded shadow-[0_0_15px_rgba(34,211,238,0.3)] hover:brightness-110 transition-all">💧 Water Billing</Link>
+          <button onClick={handleSignOut} className="px-4 py-2 border border-gray-700 text-gray-400 font-bold rounded hover:bg-red-900/30 hover:text-red-400 hover:border-red-800 transition-all">Exit 🔒</button>
+        </div>
       </header>
 
       {escalationAlerts.length > 0 && (
@@ -165,7 +224,6 @@ function Dashboard() {
             <h2 className="text-2xl font-bold text-white mb-2 text-center">Manage {editingUnit.unit_number}</h2>
             <form onSubmit={handleUpdateTenant} className="space-y-4 mt-6">
               <div><label className="block text-xs text-yvv-cyan uppercase mb-1">Tenant Name</label><input type="text" value={tenantName} onChange={(e) => setTenantName(e.target.value)} className="w-full bg-yvv-charcoalDark border border-gray-700 rounded p-3 text-white outline-none focus:border-yvv-cyan" /></div>
-              {/* UPDATED LABEL */}
               <div><label className="block text-xs text-yvv-cyan uppercase mb-1">Lease Start / Last Increase Date</label><input type="date" value={lastRentChangeDate} onChange={(e) => setLastRentChangeDate(e.target.value)} className="w-full bg-yvv-charcoalDark border border-gray-700 rounded p-3 text-white outline-none focus:border-yvv-cyan" /></div>
               <div className="flex gap-3 pt-4"><button type="button" onClick={() => setEditingUnit(null)} className="flex-1 py-3 text-gray-400 hover:text-white">Cancel</button><button type="submit" className="flex-1 py-3 bg-yvv-cyan text-yvv-charcoalDark font-bold rounded-lg hover:brightness-110">Save</button></div>
             </form>
@@ -193,9 +251,7 @@ function Dashboard() {
                   {alertStatus && (
                     <div className="mb-4 bg-yellow-900/20 text-yellow-500 p-3 rounded border border-yellow-800/50">
                       <p className="text-xs font-bold mb-2">⚠️ {alertStatus.status === 'overdue' ? `Lease expired ${alertStatus.days} days ago!` : `Lease expires in ${alertStatus.days} days`}</p>
-                      <button onClick={() => handleRenewLease(unit)} className="w-full py-2 bg-yellow-600 hover:bg-yellow-500 text-white font-bold rounded transition-colors text-sm shadow-md">
-                        🚀 Auto-Renew (10% Bump)
-                      </button>
+                      <button onClick={() => handleRenewLease(unit)} className="w-full py-2 bg-yellow-600 hover:bg-yellow-500 text-white font-bold rounded transition-colors text-sm shadow-md">🚀 Auto-Renew (10% Bump)</button>
                     </div>
                   )}
 
@@ -222,7 +278,7 @@ function Dashboard() {
 }
 
 // ==========================================
-// 2. THE WATER BILLING PAGE (Unchanged)
+// 2. THE WATER BILLING PAGE
 // ==========================================
 function WaterBilling() {
   const navigate = useNavigate()
@@ -318,7 +374,7 @@ function WaterBilling() {
 }
 
 // ==========================================
-// 3. FLAT PROFILE PAGE (DAY 13: SMART DATES)
+// 3. FLAT PROFILE PAGE
 // ==========================================
 function UnitDetail() {
   const { id } = useParams()
@@ -351,7 +407,7 @@ function UnitDetail() {
       setFormData({
         tenantName: data.current_tenant_name || '', 
         phone: data.phone_number || '', 
-        lastRentChange: data.last_rent_change_date || '', // SWAPPED!
+        lastRentChange: data.last_rent_change_date || '', 
         keyNo: data.key_number || '', 
         electricMeter: data.electric_meter_number || '', 
         ptin: data.ptin || '', 
@@ -500,14 +556,11 @@ function UnitDetail() {
               <div className="space-y-3">
                 <div><label className="text-xs text-gray-500 font-bold mb-1 block">Tenant Name</label><input type="text" placeholder="Name" value={formData.tenantName} onChange={(e) => setFormData({...formData, tenantName: e.target.value})} className="w-full border rounded p-2 text-sm" /></div>
                 <div><label className="text-xs text-gray-500 font-bold mb-1 block">Phone Number</label><input type="text" placeholder="Phone" value={formData.phone} onChange={(e) => setFormData({...formData, phone: e.target.value})} className="w-full border rounded p-2 text-sm" /></div>
-                
-                {/* DAY 13: UPDATED TO ONLY ASK FOR LEASE START / LAST RENEWAL */}
                 <div>
                   <label className="text-xs text-blue-600 font-bold mb-1 block">Lease Start / Last Increase Date ✎</label>
                   <p className="text-[10px] text-gray-500 mb-1 leading-tight">The system will automatically calculate the next renewal date 11 months from this date.</p>
                   <input type="date" value={formData.lastRentChange} onChange={(e) => setFormData({...formData, lastRentChange: e.target.value})} className="w-full border border-blue-300 rounded p-2 text-sm outline-none focus:ring-2 focus:ring-blue-500" />
                 </div>
-                
                 <div className="flex gap-2 pt-2"><button onClick={() => handleSave('tenant')} className="px-4 py-2 bg-blue-600 text-white text-sm rounded font-bold">Save</button><button onClick={() => setEditMode({...editMode, tenant: false})} className="text-sm text-gray-500">Cancel</button></div>
               </div>
             ) : (
@@ -553,8 +606,6 @@ function UnitDetail() {
                   <div className="flex justify-between border-b pb-1"><span className="text-gray-500 font-bold">Monthly Rent:</span> <span className="font-bold">₹{unit.base_rent}</span></div>
                   <div className="flex justify-between border-b pb-1"><span className="text-gray-500 font-bold">Maintenance:</span> <span>₹{unit.maintenance_fee}</span></div>
                   <div className="flex justify-between border-b pb-1"><span className="text-gray-500 font-bold">Advance Amount:</span> <span>₹{unit.advance_amount}</span></div>
-                  
-                  {/* DISPLAY THE SMART DATES */}
                   <div className="flex justify-between border-b pb-1"><span className="text-gray-500 font-bold">Lease Start / Last Increase:</span> <span>{unit.last_rent_change_date ? new Date(unit.last_rent_change_date).toLocaleDateString() : 'N/A'}</span></div>
                   <div className="flex justify-between border-b pb-1 pt-2"><span className="text-blue-600 font-bold">Last Rent Paid Date:</span> <span className="text-blue-600 font-bold">{lastRentPaid}</span></div>
                   <div className="flex justify-between pt-2"><span className="text-gray-500 font-bold">Water Bill (Selected Month):</span> <span className="text-blue-600 font-bold">{waterCost === 'Variable' ? 'Variable' : `₹${waterCost}`}</span></div>
@@ -593,15 +644,34 @@ function UnitDetail() {
 }
 
 // ==========================================
-// 4. THE APP ROUTER
+// 4. THE APP ROUTER (DAY 14: AUTH WRAPPER)
 // ==========================================
 export default function App() {
+  const [session, setSession] = useState(null)
+  const [authLoading, setAuthLoading] = useState(true)
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session)
+      setAuthLoading(false)
+    })
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session)
+    })
+
+    return () => subscription.unsubscribe()
+  }, [])
+
+  if (authLoading) return <div className="min-h-screen bg-yvv-charcoalDark flex items-center justify-center text-yvv-cyan font-bold tracking-widest animate-pulse">SECURING YPMA...</div>
+
   return (
     <Router>
       <Routes>
-        <Route path="/" element={<Dashboard />} />
-        <Route path="/unit/:id" element={<UnitDetail />} />
-        <Route path="/water" element={<WaterBilling />} />
+        <Route path="/login" element={session ? <Navigate to="/" replace /> : <LoginScreen />} />
+        <Route path="/" element={<ProtectedRoute session={session}><Dashboard /></ProtectedRoute>} />
+        <Route path="/unit/:id" element={<ProtectedRoute session={session}><UnitDetail /></ProtectedRoute>} />
+        <Route path="/water" element={<ProtectedRoute session={session}><WaterBilling /></ProtectedRoute>} />
       </Routes>
     </Router>
   )
