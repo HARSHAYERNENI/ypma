@@ -3,7 +3,7 @@ import { supabase } from './lib/supabase'
 import { BrowserRouter as Router, Routes, Route, Link, useParams, useNavigate } from 'react-router-dom'
 
 // ==========================================
-// 1. THE MAIN DASHBOARD PAGE (DAY 13: AUTO-RENEWAL)
+// 1. THE MAIN DASHBOARD PAGE (DAY 13: SMART DATES)
 // ==========================================
 function Dashboard() {
   const [units, setUnits] = useState([])
@@ -14,7 +14,7 @@ function Dashboard() {
   const [newUnitNumber, setNewUnitNumber] = useState('')
   const [newBaseRent, setNewBaseRent] = useState('')
   const [tenantName, setTenantName] = useState('')
-  const [escalationDate, setEscalationDate] = useState('')
+  const [lastRentChangeDate, setLastRentChangeDate] = useState('') // ARCHITECTURE UPGRADE!
 
   const [currentWaterBills, setCurrentWaterBills] = useState({})
 
@@ -62,40 +62,49 @@ function Dashboard() {
   const handleUpdateTenant = async (e) => {
     e.preventDefault()
     try {
-      await supabase.from('units').update({ current_tenant_name: tenantName, rent_escalation_date: escalationDate || null, is_occupied: tenantName.length > 0 }).eq('id', editingUnit.id)
+      await supabase.from('units').update({ 
+        current_tenant_name: tenantName, 
+        last_rent_change_date: lastRentChangeDate || null, 
+        is_occupied: tenantName.length > 0 
+      }).eq('id', editingUnit.id)
       setEditingUnit(null); fetchUnits()
     } catch (error) { alert(error.message) }
   }
 
-  const getEscalationStatus = (dateString) => {
-    if (!dateString) return null
-    const today = new Date(); today.setHours(0, 0, 0, 0)
-    const escalation = new Date(dateString)
-    const diffDays = Math.ceil((escalation - today) / (1000 * 60 * 60 * 24))
-    if (diffDays < 0) return { status: 'overdue', days: Math.abs(diffDays) }
-    if (diffDays <= 30) return { status: 'due_soon', days: diffDays }
-    return null
+  // --- DAY 13: THE SMART MATH ENGINE ---
+  // Calculates exactly 11 months AFTER the "Start Date"
+  const getEscalationStatus = (unit) => {
+    if (!unit.last_rent_change_date) return null;
+    
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const lastChange = new Date(unit.last_rent_change_date);
+    
+    // Add 11 Months to the Start Date to find the Expiration!
+    const expirationDate = new Date(lastChange.setMonth(lastChange.getMonth() + 11));
+    
+    const diffDays = Math.ceil((expirationDate - today) / (1000 * 60 * 60 * 24));
+    
+    if (diffDays <= 30) {
+      return { 
+        status: diffDays < 0 ? 'overdue' : 'due_soon', 
+        days: Math.abs(diffDays),
+        expireDateStr: expirationDate.toLocaleDateString()
+      }
+    }
+    return null;
   }
 
-  // --- DAY 13: THE 1-CLICK AUTO RENEWAL ENGINE ---
   const handleRenewLease = async (unit) => {
     const currentRent = Number(unit.base_rent) || 0;
-    const newRent = Math.round(currentRent * 1.10); // Standard 10% Indian Rent Bump
-    
-    // Add 11 months to their current escalation date
-    const baseDate = unit.rent_escalation_date ? new Date(unit.rent_escalation_date) : new Date();
-    const newEscalationDate = new Date(baseDate.setMonth(baseDate.getMonth() + 11)).toISOString().split('T')[0];
+    const newRent = Math.round(currentRent * 1.10);
     const today = new Date().toISOString().split('T')[0];
 
-    const confirmMessage = `🚀 Renew Lease for ${unit.current_tenant_name}?\n\n1. Rent will increase by 10% (₹${currentRent} ➡️ ₹${newRent})\n2. Next Renewal Date will be set to: ${newEscalationDate}\n\nDo you want to proceed?`;
-    
-    if (!window.confirm(confirmMessage)) return;
+    if (!window.confirm(`🚀 Renew Lease for ${unit.current_tenant_name}?\n\n1. Rent will increase by 10% (₹${currentRent} ➡️ ₹${newRent})\n2. Next Renewal will automatically be calculated 11 months from today.\n\nProceed?`)) return;
 
     try {
       await supabase.from('units').update({
         base_rent: newRent,
-        rent_escalation_date: newEscalationDate,
-        last_rent_change_date: today // Logs when you made this change!
+        last_rent_change_date: today // WE ONLY UPDATE THIS FACT! Math handles the rest.
       }).eq('id', unit.id);
       
       alert(`✅ Success! Rent is now ₹${newRent} and the warning has been cleared.`);
@@ -109,13 +118,15 @@ function Dashboard() {
   const occupiedUnits = units.filter(u => u.is_occupied).length
   const vacantUnits = totalUnits - occupiedUnits
   const monthlyRevenue = units.filter(u => u.is_occupied).reduce((sum, unit) => sum + (Number(unit.base_rent) || 0), 0)
-  const escalationAlerts = units.filter(u => u.is_occupied && getEscalationStatus(u.rent_escalation_date) !== null)
+  
+  // Use the new smart engine for alerts
+  const escalationAlerts = units.filter(u => u.is_occupied && getEscalationStatus(u) !== null)
 
   const displayedUnits = units.filter(unit => {
     if (filter === 'all') return true
     if (filter === 'occupied') return unit.is_occupied
     if (filter === 'vacant') return !unit.is_occupied
-    if (filter === 'alerts') return unit.is_occupied && getEscalationStatus(unit.rent_escalation_date) !== null
+    if (filter === 'alerts') return unit.is_occupied && getEscalationStatus(unit) !== null
     return true
   })
 
@@ -148,10 +159,24 @@ function Dashboard() {
         <button onClick={() => setFilter('alerts')} className={`px-4 py-2 rounded-full text-sm font-semibold transition-all ${filter === 'alerts' ? 'bg-yellow-500 text-yellow-950' : 'bg-yvv-charcoal text-gray-400 hover:text-yellow-500'}`}>Alerts ({escalationAlerts.length})</button>
       </div>
 
+      {editingUnit && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+          <div className="bg-yvv-charcoal p-8 rounded-xl border border-yvv-cyan w-full max-w-md shadow-2xl">
+            <h2 className="text-2xl font-bold text-white mb-2 text-center">Manage {editingUnit.unit_number}</h2>
+            <form onSubmit={handleUpdateTenant} className="space-y-4 mt-6">
+              <div><label className="block text-xs text-yvv-cyan uppercase mb-1">Tenant Name</label><input type="text" value={tenantName} onChange={(e) => setTenantName(e.target.value)} className="w-full bg-yvv-charcoalDark border border-gray-700 rounded p-3 text-white outline-none focus:border-yvv-cyan" /></div>
+              {/* UPDATED LABEL */}
+              <div><label className="block text-xs text-yvv-cyan uppercase mb-1">Lease Start / Last Increase Date</label><input type="date" value={lastRentChangeDate} onChange={(e) => setLastRentChangeDate(e.target.value)} className="w-full bg-yvv-charcoalDark border border-gray-700 rounded p-3 text-white outline-none focus:border-yvv-cyan" /></div>
+              <div className="flex gap-3 pt-4"><button type="button" onClick={() => setEditingUnit(null)} className="flex-1 py-3 text-gray-400 hover:text-white">Cancel</button><button type="submit" className="flex-1 py-3 bg-yvv-cyan text-yvv-charcoalDark font-bold rounded-lg hover:brightness-110">Save</button></div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {loading ? <p className="text-yvv-cyan animate-pulse text-center">Loading...</p> : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {displayedUnits.map((unit) => {
-            const alertStatus = unit.is_occupied ? getEscalationStatus(unit.rent_escalation_date) : null;
+            const alertStatus = unit.is_occupied ? getEscalationStatus(unit) : null;
             const waterBillForThisUnit = currentWaterBills[unit.id]
 
             return (
@@ -165,10 +190,9 @@ function Dashboard() {
                     <button onClick={() => toggleOccupancy(unit.id, unit.is_occupied)} className={`px-3 py-1 rounded-full text-xs font-semibold ${unit.is_occupied ? 'bg-green-900/50 text-green-400 border border-green-800' : 'bg-red-900/50 text-red-400 border border-red-800'}`}>{unit.is_occupied ? 'Occupied' : 'Vacant'}</button>
                   </div>
                   
-                  {/* DAY 13: BUTTON ADDED TO WARNING BANNER */}
                   {alertStatus && (
                     <div className="mb-4 bg-yellow-900/20 text-yellow-500 p-3 rounded border border-yellow-800/50">
-                      <p className="text-xs font-bold mb-2">⚠️ {alertStatus.status === 'overdue' ? `Lease overdue by ${alertStatus.days} days!` : `Lease expires in ${alertStatus.days} days`}</p>
+                      <p className="text-xs font-bold mb-2">⚠️ {alertStatus.status === 'overdue' ? `Lease expired ${alertStatus.days} days ago!` : `Lease expires in ${alertStatus.days} days`}</p>
                       <button onClick={() => handleRenewLease(unit)} className="w-full py-2 bg-yellow-600 hover:bg-yellow-500 text-white font-bold rounded transition-colors text-sm shadow-md">
                         🚀 Auto-Renew (10% Bump)
                       </button>
@@ -184,6 +208,9 @@ function Dashboard() {
                 </div>
                 <div className="mt-4 pt-4 border-t border-gray-800 space-y-3">
                   <Link to={`/unit/${unit.id}`} className="block text-center w-full py-2 bg-yvv-cyan text-yvv-charcoalDark rounded-lg hover:brightness-110 font-bold text-sm shadow-[0_0_10px_rgba(34,211,238,0.2)]">View Flat Profile →</Link>
+                  <div className="flex gap-2">
+                    <button onClick={() => { setEditingUnit(unit); setTenantName(unit.current_tenant_name || ''); setLastRentChangeDate(unit.last_rent_change_date || ''); }} className="flex-1 py-2 bg-yvv-charcoalDark border border-gray-700 text-gray-300 rounded-lg text-xs font-semibold hover:border-yvv-cyan">Quick Manage</button>
+                  </div>
                 </div>
               </div>
             )
@@ -291,7 +318,7 @@ function WaterBilling() {
 }
 
 // ==========================================
-// 3. FLAT PROFILE PAGE (DAY 13: AUTO RENEWAL)
+// 3. FLAT PROFILE PAGE (DAY 13: SMART DATES)
 // ==========================================
 function UnitDetail() {
   const { id } = useParams()
@@ -322,7 +349,15 @@ function UnitDetail() {
       if (error) throw error
       setUnit(data)
       setFormData({
-        tenantName: data.current_tenant_name || '', phone: data.phone_number || '', escalation: data.rent_escalation_date || '', keyNo: data.key_number || '', electricMeter: data.electric_meter_number || '', ptin: data.ptin || '', rent: data.base_rent || '', maintenance: data.maintenance_fee || '', advance: data.advance_amount || '', lastRentChange: data.last_rent_change_date || ''
+        tenantName: data.current_tenant_name || '', 
+        phone: data.phone_number || '', 
+        lastRentChange: data.last_rent_change_date || '', // SWAPPED!
+        keyNo: data.key_number || '', 
+        electricMeter: data.electric_meter_number || '', 
+        ptin: data.ptin || '', 
+        rent: data.base_rent || '', 
+        maintenance: data.maintenance_fee || '', 
+        advance: data.advance_amount || ''
       })
     } catch (error) { console.error(error.message) } finally { setLoading(false) }
   }
@@ -348,32 +383,28 @@ function UnitDetail() {
     try {
       const { error: historyError } = await supabase.from('tenant_history').insert([{ unit_id: id, tenant_name: unit.current_tenant_name, phone_number: unit.phone_number }])
       if (historyError) throw historyError
-      const { error: wipeError } = await supabase.from('units').update({ current_tenant_name: null, phone_number: null, advance_amount: 0, rent_escalation_date: null, is_occupied: false }).eq('id', id)
+      const { error: wipeError } = await supabase.from('units').update({ current_tenant_name: null, phone_number: null, advance_amount: 0, last_rent_change_date: null, is_occupied: false }).eq('id', id)
       if (wipeError) throw wipeError
       alert("Tenant archived successfully. The unit is now vacant.")
       fetchUnit(); fetchTenantHistory()
     } catch (error) { alert("Error archiving tenant: " + error.message) }
   }
 
-  // --- DAY 13: THE 1-CLICK AUTO RENEWAL ENGINE (Profile Version) ---
   const handleRenewLease = async () => {
     const currentRent = Number(unit.base_rent) || 0;
     const newRent = Math.round(currentRent * 1.10);
-    const baseDate = unit.rent_escalation_date ? new Date(unit.rent_escalation_date) : new Date();
-    const newEscalationDate = new Date(baseDate.setMonth(baseDate.getMonth() + 11)).toISOString().split('T')[0];
     const today = new Date().toISOString().split('T')[0];
 
-    if (!window.confirm(`🚀 Renew Lease for ${unit.current_tenant_name}?\n\n1. Rent will increase by 10% (₹${currentRent} ➡️ ₹${newRent})\n2. Next Renewal Date will be set to: ${newEscalationDate}\n\nDo you want to proceed?`)) return;
+    if (!window.confirm(`🚀 Renew Lease for ${unit.current_tenant_name}?\n\n1. Rent will increase by 10% (₹${currentRent} ➡️ ₹${newRent})\n2. Next Renewal will automatically be calculated 11 months from today.\n\nProceed?`)) return;
 
     try {
       await supabase.from('units').update({
         base_rent: newRent,
-        rent_escalation_date: newEscalationDate,
         last_rent_change_date: today
       }).eq('id', unit.id);
       
       alert(`✅ Success! Rent is now ₹${newRent} and the warning has been cleared.`);
-      fetchUnit(); // Refresh the page UI instantly
+      fetchUnit();
     } catch (error) {
       alert("Error renewing lease: " + error.message);
     }
@@ -382,9 +413,9 @@ function UnitDetail() {
   const handleSave = async (section) => {
     try {
       let updateData = {}
-      if (section === 'tenant') updateData = { current_tenant_name: formData.tenantName, phone_number: formData.phone, rent_escalation_date: formData.escalation || null, is_occupied: formData.tenantName.length > 0 }
+      if (section === 'tenant') updateData = { current_tenant_name: formData.tenantName, phone_number: formData.phone, last_rent_change_date: formData.lastRentChange || null, is_occupied: formData.tenantName.length > 0 }
       else if (section === 'tech') updateData = { key_number: formData.keyNo, electric_meter_number: formData.electricMeter, ptin: formData.ptin }
-      else if (section === 'financial') updateData = { base_rent: formData.rent, maintenance_fee: formData.maintenance, advance_amount: formData.advance, last_rent_change_date: formData.lastRentChange || null }
+      else if (section === 'financial') updateData = { base_rent: formData.rent, maintenance_fee: formData.maintenance, advance_amount: formData.advance }
 
       await supabase.from('units').update(updateData).eq('id', id)
       setEditMode({ ...editMode, [section]: false }); fetchUnit()
@@ -415,31 +446,35 @@ function UnitDetail() {
     } catch (error) { fetchPayments() }
   }
 
-  const getEscalationStatus = (dateString) => {
-    if (!dateString) return null
-    const today = new Date(); today.setHours(0, 0, 0, 0)
-    const escalation = new Date(dateString)
-    const diffDays = Math.ceil((escalation - today) / (1000 * 60 * 60 * 24))
-    if (diffDays <= 30) return { status: diffDays < 0 ? 'overdue' : 'due_soon', days: Math.abs(diffDays) }
+  const getEscalationStatus = (unit) => {
+    if (!unit.last_rent_change_date) return null;
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const lastChange = new Date(unit.last_rent_change_date);
+    const expirationDate = new Date(lastChange.setMonth(lastChange.getMonth() + 11));
+    const diffDays = Math.ceil((expirationDate - today) / (1000 * 60 * 60 * 24));
+    
+    if (diffDays <= 30) {
+      return { status: diffDays < 0 ? 'overdue' : 'due_soon', days: Math.abs(diffDays), expireDateStr: expirationDate.toLocaleDateString() }
+    }
     return null
   }
 
   if (loading) return <div className="min-h-screen bg-yvv-charcoalDark flex justify-center items-center text-yvv-cyan">Loading...</div>
   if (!unit) return <div className="min-h-screen bg-yvv-charcoalDark flex justify-center items-center text-red-500">Unit not found.</div>
 
-  const alertStatus = getEscalationStatus(unit.rent_escalation_date);
+  const alertStatus = getEscalationStatus(unit);
 
   return (
     <div className="min-h-screen bg-[#e5e7eb] text-gray-900 p-8 font-sans pb-24">
       <div className="max-w-5xl mx-auto">
         <button onClick={() => navigate('/')} className="text-gray-600 hover:text-black transition-colors mb-6 flex items-center gap-2 font-bold"><span>←</span> Back to Dashboard</button>
 
-        {/* DAY 13: WARNING BANNER ON PROFILE PAGE */}
         {alertStatus && (
           <div className="mb-6 bg-yellow-100 border-l-4 border-yellow-500 p-4 rounded shadow-sm flex justify-between items-center">
             <div>
               <h3 className="text-yellow-800 font-bold text-lg">⚠️ Action Required: Lease Renewal</h3>
               <p className="text-sm text-yellow-700 mt-1">This tenant's lease {alertStatus.status === 'overdue' ? `expired ${alertStatus.days} days ago.` : `expires in ${alertStatus.days} days.`}</p>
+              <p className="text-xs font-bold text-yellow-800 mt-1">Calculated Expiration: {alertStatus.expireDateStr}</p>
             </div>
             <button onClick={handleRenewLease} className="px-6 py-3 bg-yellow-500 text-white font-bold rounded shadow hover:bg-yellow-600 transition-colors">
               🚀 Auto-Renew Lease (10% Bump)
@@ -465,7 +500,14 @@ function UnitDetail() {
               <div className="space-y-3">
                 <div><label className="text-xs text-gray-500 font-bold mb-1 block">Tenant Name</label><input type="text" placeholder="Name" value={formData.tenantName} onChange={(e) => setFormData({...formData, tenantName: e.target.value})} className="w-full border rounded p-2 text-sm" /></div>
                 <div><label className="text-xs text-gray-500 font-bold mb-1 block">Phone Number</label><input type="text" placeholder="Phone" value={formData.phone} onChange={(e) => setFormData({...formData, phone: e.target.value})} className="w-full border rounded p-2 text-sm" /></div>
-                <div><label className="text-xs text-gray-500 font-bold mb-1 block">Rent Escalation Date</label><input type="date" value={formData.escalation} onChange={(e) => setFormData({...formData, escalation: e.target.value})} className="w-full border rounded p-2 text-sm" /></div>
+                
+                {/* DAY 13: UPDATED TO ONLY ASK FOR LEASE START / LAST RENEWAL */}
+                <div>
+                  <label className="text-xs text-blue-600 font-bold mb-1 block">Lease Start / Last Increase Date ✎</label>
+                  <p className="text-[10px] text-gray-500 mb-1 leading-tight">The system will automatically calculate the next renewal date 11 months from this date.</p>
+                  <input type="date" value={formData.lastRentChange} onChange={(e) => setFormData({...formData, lastRentChange: e.target.value})} className="w-full border border-blue-300 rounded p-2 text-sm outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+                
                 <div className="flex gap-2 pt-2"><button onClick={() => handleSave('tenant')} className="px-4 py-2 bg-blue-600 text-white text-sm rounded font-bold">Save</button><button onClick={() => setEditMode({...editMode, tenant: false})} className="text-sm text-gray-500">Cancel</button></div>
               </div>
             ) : (
@@ -500,14 +542,10 @@ function UnitDetail() {
                 <div className="space-y-3 bg-gray-50 p-4 rounded border">
                   <div><label className="text-xs text-gray-500 font-bold">Monthly Rent</label><input type="number" value={formData.rent} onChange={(e) => setFormData({...formData, rent: e.target.value})} className="w-full border rounded p-2 text-sm" /></div>
                   <div><label className="text-xs text-gray-500 font-bold">Maintenance</label><input type="number" value={formData.maintenance} onChange={(e) => setFormData({...formData, maintenance: e.target.value})} className="w-full border rounded p-2 text-sm" /></div>
-                  
-                  {/* HERE IS WHERE YOU CAN EDIT THE ADVANCE AMOUNT! */}
                   <div className="border-t pt-3 mt-3">
                     <label className="text-xs text-blue-600 font-bold block mb-1">Advance Amount (Deposit) - Editable ✎</label>
                     <input type="number" value={formData.advance} onChange={(e) => setFormData({...formData, advance: e.target.value})} className="w-full border border-blue-300 rounded p-2 text-sm outline-none focus:ring-2 focus:ring-blue-500" />
                   </div>
-                  <div><label className="text-xs text-gray-500 font-bold block mb-1">Last Rent Increase Date</label><input type="date" value={formData.lastRentChange} onChange={(e) => setFormData({...formData, lastRentChange: e.target.value})} className="w-full border rounded p-2 text-sm" /></div>
-                  
                   <div className="flex gap-2 pt-2"><button onClick={() => handleSave('financial')} className="px-4 py-2 bg-blue-600 text-white text-sm rounded font-bold">Save</button><button onClick={() => setEditMode({...editMode, financial: false})} className="text-sm text-gray-500">Cancel</button></div>
                 </div>
               ) : (
@@ -515,7 +553,9 @@ function UnitDetail() {
                   <div className="flex justify-between border-b pb-1"><span className="text-gray-500 font-bold">Monthly Rent:</span> <span className="font-bold">₹{unit.base_rent}</span></div>
                   <div className="flex justify-between border-b pb-1"><span className="text-gray-500 font-bold">Maintenance:</span> <span>₹{unit.maintenance_fee}</span></div>
                   <div className="flex justify-between border-b pb-1"><span className="text-gray-500 font-bold">Advance Amount:</span> <span>₹{unit.advance_amount}</span></div>
-                  <div className="flex justify-between border-b pb-1"><span className="text-gray-500 font-bold">Last Rent Increase:</span> <span>{unit.last_rent_change_date ? new Date(unit.last_rent_change_date).toLocaleDateString() : 'N/A'}</span></div>
+                  
+                  {/* DISPLAY THE SMART DATES */}
+                  <div className="flex justify-between border-b pb-1"><span className="text-gray-500 font-bold">Lease Start / Last Increase:</span> <span>{unit.last_rent_change_date ? new Date(unit.last_rent_change_date).toLocaleDateString() : 'N/A'}</span></div>
                   <div className="flex justify-between border-b pb-1 pt-2"><span className="text-blue-600 font-bold">Last Rent Paid Date:</span> <span className="text-blue-600 font-bold">{lastRentPaid}</span></div>
                   <div className="flex justify-between pt-2"><span className="text-gray-500 font-bold">Water Bill (Selected Month):</span> <span className="text-blue-600 font-bold">{waterCost === 'Variable' ? 'Variable' : `₹${waterCost}`}</span></div>
                 </div>
