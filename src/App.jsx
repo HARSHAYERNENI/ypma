@@ -3,7 +3,7 @@ import { supabase } from './lib/supabase'
 import { BrowserRouter as Router, Routes, Route, Link, useParams, useNavigate } from 'react-router-dom'
 
 // ==========================================
-// 1. THE DASHBOARD PAGE (Your Day 6 Code)
+// 1. THE DASHBOARD PAGE (Days 1-6)
 // ==========================================
 function Dashboard() {
   const [units, setUnits] = useState([])
@@ -114,7 +114,7 @@ function Dashboard() {
       {editingUnit && (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
           <div className="bg-yvv-charcoal p-8 rounded-xl border border-yvv-cyan w-full max-w-md shadow-2xl">
-            <h2 className="text-2xl font-bold text-white mb-2 text-center">Manage {editingUnit.unit_number}</h2>
+            <h2 className="text-2xl font-bold text-white mb-2 text-center">Manage Dashboard {editingUnit.unit_number}</h2>
             <form onSubmit={handleUpdateTenant} className="space-y-4 mt-6">
               <div><label className="block text-xs text-yvv-cyan uppercase mb-1">Tenant Name</label><input type="text" value={tenantName} onChange={(e) => setTenantName(e.target.value)} className="w-full bg-yvv-charcoalDark border border-gray-700 rounded p-3 text-white outline-none focus:border-yvv-cyan" /></div>
               <div><label className="block text-xs text-yvv-cyan uppercase mb-1">Rent Escalation Date</label><input type="date" value={escalationDate} onChange={(e) => setEscalationDate(e.target.value)} className="w-full bg-yvv-charcoalDark border border-gray-700 rounded p-3 text-white outline-none focus:border-yvv-cyan" /></div>
@@ -148,7 +148,6 @@ function Dashboard() {
                 </div>
               </div>
 
-              {/* --- NEW: Updated Action Buttons --- */}
               <div className="mt-4 pt-4 border-t border-gray-800 space-y-3">
                 <Link to={`/unit/${unit.id}`} className="block text-center w-full py-2 bg-yvv-cyan text-yvv-charcoalDark rounded-lg hover:brightness-110 transition-all font-bold text-sm shadow-[0_0_10px_rgba(34,211,238,0.2)]">
                   View Flat Profile →
@@ -171,24 +170,64 @@ function Dashboard() {
 }
 
 // ==========================================
-// 2. THE NEW FLAT PROFILE PAGE (Day 7)
+// 2. THE NEW FLAT PROFILE PAGE (Day 8: Interactive)
 // ==========================================
 function UnitDetail() {
-  const { id } = useParams() // Grabs the unit ID from the URL
-  const navigate = useNavigate() // Allows us to go "Back"
+  const { id } = useParams()
+  const navigate = useNavigate()
   const [unit, setUnit] = useState(null)
   const [loading, setLoading] = useState(true)
 
+  // --- DAY 8: Interactive Editing States ---
+  const [isEditingFinancials, setIsEditingFinancials] = useState(false)
+  const [editRent, setEditRent] = useState('')
+  const [editMaintenance, setEditMaintenance] = useState('')
+
+  const [isEditingTenant, setIsEditingTenant] = useState(false)
+  const [editTenantName, setEditTenantName] = useState('')
+  const [editEscalationDate, setEditEscalationDate] = useState('')
+
   useEffect(() => {
-    const fetchUnit = async () => {
-      try {
-        const { data, error } = await supabase.from('units').select('*, properties(name)').eq('id', id).single()
-        if (error) throw error
-        setUnit(data)
-      } catch (error) { console.error(error.message) } finally { setLoading(false) }
-    }
     fetchUnit()
   }, [id])
+
+  const fetchUnit = async () => {
+    try {
+      const { data, error } = await supabase.from('units').select('*, properties(name)').eq('id', id).single()
+      if (error) throw error
+      setUnit(data)
+      // Pre-fill forms with current database data
+      setEditRent(data.base_rent)
+      setEditMaintenance(data.maintenance_fee)
+      setEditTenantName(data.current_tenant_name || '')
+      setEditEscalationDate(data.rent_escalation_date || '')
+    } catch (error) { console.error(error.message) } finally { setLoading(false) }
+  }
+
+  // --- DAY 8: Save Functions ---
+  const handleSaveFinancials = async () => {
+    try {
+      const { error } = await supabase.from('units')
+        .update({ base_rent: editRent, maintenance_fee: editMaintenance }).eq('id', id)
+      if (error) throw error
+      setIsEditingFinancials(false)
+      fetchUnit() // Refresh the local view
+    } catch (error) { alert(error.message) }
+  }
+
+  const handleSaveTenant = async () => {
+    try {
+      const { error } = await supabase.from('units')
+        .update({ 
+          current_tenant_name: editTenantName, 
+          rent_escalation_date: editEscalationDate || null,
+          is_occupied: editTenantName.length > 0 
+        }).eq('id', id)
+      if (error) throw error
+      setIsEditingTenant(false)
+      fetchUnit()
+    } catch (error) { alert(error.message) }
+  }
 
   if (loading) return <div className="min-h-screen bg-yvv-charcoalDark flex justify-center items-center text-yvv-cyan animate-pulse">Loading Profile...</div>
   if (!unit) return <div className="min-h-screen bg-yvv-charcoalDark flex justify-center items-center text-red-500">Unit not found.</div>
@@ -211,41 +250,76 @@ function UnitDetail() {
         </header>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-          {/* Tenant Details Card */}
+          {/* --- TENANT DETAILS CARD --- */}
           <div className="bg-yvv-charcoal p-6 rounded-xl border border-gray-800 shadow-lg">
             <h2 className="text-xl font-bold text-white mb-6 border-b border-gray-700 pb-2">Tenant Information</h2>
-            <div className="space-y-4">
-              <div>
-                <p className="text-gray-500 text-xs uppercase tracking-wider mb-1">Name</p>
-                <p className="text-lg text-white font-medium">{unit.current_tenant_name || 'No tenant assigned'}</p>
+            
+            {isEditingTenant ? (
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-xs text-yvv-cyan uppercase mb-1">Name</label>
+                  <input type="text" value={editTenantName} onChange={(e) => setEditTenantName(e.target.value)} className="w-full bg-yvv-charcoalDark border border-gray-700 rounded p-2 text-white outline-none focus:border-yvv-cyan" />
+                </div>
+                <div>
+                  <label className="block text-xs text-yvv-cyan uppercase mb-1">Rent Escalation Date</label>
+                  <input type="date" value={editEscalationDate} onChange={(e) => setEditEscalationDate(e.target.value)} className="w-full bg-yvv-charcoalDark border border-gray-700 rounded p-2 text-white outline-none focus:border-yvv-cyan" />
+                </div>
+                <div className="flex gap-2 pt-2">
+                  <button onClick={handleSaveTenant} className="px-4 py-2 bg-yvv-cyan text-yvv-charcoalDark font-bold rounded text-sm hover:brightness-110">Save</button>
+                  <button onClick={() => setIsEditingTenant(false)} className="px-4 py-2 text-gray-400 hover:text-white text-sm">Cancel</button>
+                </div>
               </div>
-              <div>
-                <p className="text-gray-500 text-xs uppercase tracking-wider mb-1">Rent Escalation Date</p>
-                <p className="text-white">{unit.rent_escalation_date ? new Date(unit.rent_escalation_date).toLocaleDateString() : 'Not Set'}</p>
+            ) : (
+              <div className="space-y-4">
+                <div>
+                  <p className="text-gray-500 text-xs uppercase tracking-wider mb-1">Name</p>
+                  <p className="text-lg text-white font-medium">{unit.current_tenant_name || 'No tenant assigned'}</p>
+                </div>
+                <div>
+                  <p className="text-gray-500 text-xs uppercase tracking-wider mb-1">Rent Escalation Date</p>
+                  <p className="text-white">{unit.rent_escalation_date ? new Date(unit.rent_escalation_date).toLocaleDateString() : 'Not Set'}</p>
+                </div>
+                <div className="mt-6 pt-4 border-t border-gray-700">
+                  <button onClick={() => setIsEditingTenant(true)} className="text-yvv-cyan text-sm hover:underline font-semibold">Edit Tenant ✎</button>
+                </div>
               </div>
-              <div>
-                <p className="text-gray-500 text-xs uppercase tracking-wider mb-1">Aadhar Document</p>
-                <p className="text-gray-400 text-sm italic">Not uploaded yet</p>
-              </div>
-            </div>
+            )}
           </div>
 
-          {/* Financials Card */}
+          {/* --- FINANCIALS CARD --- */}
           <div className="bg-yvv-charcoal p-6 rounded-xl border border-gray-800 shadow-lg">
             <h2 className="text-xl font-bold text-white mb-6 border-b border-gray-700 pb-2">Financials</h2>
-            <div className="space-y-4">
-              <div>
-                <p className="text-gray-500 text-xs uppercase tracking-wider mb-1">Base Rent</p>
-                <p className="text-3xl text-white font-bold">₹{unit.base_rent}</p>
+            
+            {isEditingFinancials ? (
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-xs text-yvv-cyan uppercase mb-1">Base Rent (₹)</label>
+                  <input type="number" value={editRent} onChange={(e) => setEditRent(e.target.value)} className="w-full bg-yvv-charcoalDark border border-gray-700 rounded p-2 text-white outline-none focus:border-yvv-cyan" />
+                </div>
+                <div>
+                  <label className="block text-xs text-yvv-cyan uppercase mb-1">Maintenance Fee (₹)</label>
+                  <input type="number" value={editMaintenance} onChange={(e) => setEditMaintenance(e.target.value)} className="w-full bg-yvv-charcoalDark border border-gray-700 rounded p-2 text-white outline-none focus:border-yvv-cyan" />
+                </div>
+                <div className="flex gap-2 pt-2">
+                  <button onClick={handleSaveFinancials} className="px-4 py-2 bg-yvv-cyan text-yvv-charcoalDark font-bold rounded text-sm hover:brightness-110">Save</button>
+                  <button onClick={() => setIsEditingFinancials(false)} className="px-4 py-2 text-gray-400 hover:text-white text-sm">Cancel</button>
+                </div>
               </div>
-              <div>
-                <p className="text-gray-500 text-xs uppercase tracking-wider mb-1">Maintenance Fee</p>
-                <p className="text-white text-lg">₹{unit.maintenance_fee}</p>
+            ) : (
+              <div className="space-y-4">
+                <div>
+                  <p className="text-gray-500 text-xs uppercase tracking-wider mb-1">Base Rent</p>
+                  <p className="text-3xl text-white font-bold">₹{unit.base_rent}</p>
+                </div>
+                <div>
+                  <p className="text-gray-500 text-xs uppercase tracking-wider mb-1">Maintenance Fee</p>
+                  <p className="text-white text-lg">₹{unit.maintenance_fee}</p>
+                </div>
+                <div className="mt-6 pt-4 border-t border-gray-700">
+                  <button onClick={() => setIsEditingFinancials(true)} className="text-yvv-cyan text-sm hover:underline font-semibold">Edit Financials ✎</button>
+                </div>
               </div>
-              <div className="mt-6 pt-4 border-t border-gray-700">
-                <button className="text-yvv-cyan text-sm hover:underline font-semibold">Edit Financials ✎</button>
-              </div>
-            </div>
+            )}
           </div>
         </div>
       </div>
@@ -254,7 +328,7 @@ function UnitDetail() {
 }
 
 // ==========================================
-// 3. THE APP ROUTER (Ties it all together)
+// 3. THE APP ROUTER
 // ==========================================
 export default function App() {
   return (
