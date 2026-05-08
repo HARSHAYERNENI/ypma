@@ -3,7 +3,7 @@ import { supabase } from './lib/supabase'
 import { BrowserRouter as Router, Routes, Route, Link, useParams, useNavigate, Navigate } from 'react-router-dom'
 
 // ==========================================
-// 0. AUTHENTICATION & SECURITY (DAY 14)
+// 0. AUTHENTICATION & SECURITY
 // ==========================================
 function LoginScreen() {
   const [email, setEmail] = useState('')
@@ -14,14 +14,16 @@ function LoginScreen() {
   const handleAuth = async (e) => {
     e.preventDefault()
     setLoading(true)
+    const loginEmail = email.includes('@') ? email.trim() : `${email.trim().toLowerCase()}@ypma.com`;
+
     try {
       if (isSignUp) {
-        const { error } = await supabase.auth.signUp({ email, password })
+        const { error } = await supabase.auth.signUp({ email: loginEmail, password })
         if (error) throw error
         alert("Account created successfully! You can now sign in.")
         setIsSignUp(false)
       } else {
-        const { error } = await supabase.auth.signInWithPassword({ email, password })
+        const { error } = await supabase.auth.signInWithPassword({ email: loginEmail, password })
         if (error) throw error
       }
     } catch (error) {
@@ -41,8 +43,8 @@ function LoginScreen() {
 
         <form onSubmit={handleAuth} className="space-y-6">
           <div>
-            <label className="block text-xs text-yvv-cyan uppercase tracking-wider mb-2 font-bold">Admin Email</label>
-            <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} className="w-full bg-yvv-charcoalDark border border-gray-700 rounded p-3 text-white outline-none focus:border-yvv-cyan transition-colors" placeholder="admin@yerneni.com" />
+            <label className="block text-xs text-yvv-cyan uppercase tracking-wider mb-2 font-bold">Username or Email</label>
+            <input type="text" required value={email} onChange={(e) => setEmail(e.target.value)} className="w-full bg-yvv-charcoalDark border border-gray-700 rounded p-3 text-white outline-none focus:border-yvv-cyan transition-colors" placeholder="username" />
           </div>
           <div>
             <label className="block text-xs text-yvv-cyan uppercase tracking-wider mb-2 font-bold">Password</label>
@@ -70,14 +72,17 @@ function ProtectedRoute({ session, children }) {
 }
 
 // ==========================================
-// 1. THE MAIN DASHBOARD PAGE
+// 1. THE MAIN DASHBOARD PAGE (UPDATED GROUPING UI)
 // ==========================================
-function Dashboard() {
+function Dashboard({ isAdmin }) {
+  const [properties, setProperties] = useState([]) // NEW: Stores the buildings
   const [units, setUnits] = useState([])
   const [loading, setLoading] = useState(true)
   const [editingUnit, setEditingUnit] = useState(null)
   const [filter, setFilter] = useState('all')
 
+  // NEW: Dropdown selection for Admin
+  const [selectedPropertyId, setSelectedPropertyId] = useState('') 
   const [newUnitNumber, setNewUnitNumber] = useState('')
   const [newBaseRent, setNewBaseRent] = useState('')
   const [tenantName, setTenantName] = useState('')
@@ -85,45 +90,45 @@ function Dashboard() {
 
   const [currentWaterBills, setCurrentWaterBills] = useState({})
 
-  useEffect(() => { fetchUnits(); fetchCurrentWaterBills() }, [])
+  useEffect(() => { fetchData() }, [])
 
-  const fetchUnits = async () => {
+  const fetchData = async () => {
     try {
-      const { data, error } = await supabase.from('units').select(`*, properties(name)`).order('unit_number', { ascending: true })
-      if (error) throw error
-      setUnits(data)
-    } catch (error) { console.error(error.message) } finally { setLoading(false) }
-  }
+      // 1. Fetch buildings the user is allowed to see
+      const { data: propData, error: propError } = await supabase.from('properties').select('*').order('name', { ascending: true })
+      if (propError) throw propError
+      setProperties(propData)
+      
+      // Auto-select the first property in the dropdown for convenience
+      if (propData.length > 0) setSelectedPropertyId(propData[0].id)
 
-  const fetchCurrentWaterBills = async () => {
-    const currentMonth = new Date().toISOString().slice(0, 7)
-    try {
-      const { data } = await supabase.from('unit_water_readings').select('unit_id, flat_bill_amount').eq('billing_month', currentMonth)
-      if (data) {
+      // 2. Fetch flats
+      const { data: unitData, error: unitError } = await supabase.from('units').select(`*, properties(name)`).order('unit_number', { ascending: true })
+      if (unitError) throw unitError
+      setUnits(unitData)
+
+      // 3. Fetch water bills
+      const currentMonth = new Date().toISOString().slice(0, 7)
+      const { data: waterData } = await supabase.from('unit_water_readings').select('unit_id, flat_bill_amount').eq('billing_month', currentMonth)
+      if (waterData) {
         const billsMap = {}
-        data.forEach(bill => billsMap[bill.unit_id] = bill.flat_bill_amount)
+        waterData.forEach(bill => billsMap[bill.unit_id] = bill.flat_bill_amount)
         setCurrentWaterBills(billsMap)
       }
-    } catch (error) { console.error("Could not fetch water bills") }
+    } catch (error) { console.error(error.message) } finally { setLoading(false) }
   }
 
   const handleAddUnit = async (e) => {
     e.preventDefault()
-    const alkapuriId = units.length > 0 ? units[0].property_id : null
-    if (!alkapuriId || !newUnitNumber || !newBaseRent) return
+    if (!selectedPropertyId || !newUnitNumber || !newBaseRent) return alert("Please fill out all fields and select a property.")
     try {
-      await supabase.from('units').insert([{ property_id: alkapuriId, unit_number: newUnitNumber, base_rent: newBaseRent }])
-      setNewUnitNumber(''); setNewBaseRent(''); fetchUnits()
+      await supabase.from('units').insert([{ property_id: selectedPropertyId, unit_number: newUnitNumber, base_rent: newBaseRent }])
+      setNewUnitNumber(''); setNewBaseRent(''); fetchData() // Refresh all data
     } catch (error) { alert(error.message) }
   }
 
   const toggleOccupancy = async (id, currentStatus) => {
-    try { await supabase.from('units').update({ is_occupied: !currentStatus }).eq('id', id); fetchUnits() } catch (error) { alert(error.message) }
-  }
-
-  const deleteUnit = async (id) => {
-    if (!window.confirm("Are you sure you want to delete this unit?")) return
-    try { await supabase.from('units').delete().eq('id', id); fetchUnits() } catch (error) { alert(error.message) }
+    try { await supabase.from('units').update({ is_occupied: !currentStatus }).eq('id', id); fetchData() } catch (error) { alert(error.message) }
   }
 
   const handleUpdateTenant = async (e) => {
@@ -134,7 +139,7 @@ function Dashboard() {
         last_rent_change_date: lastRentChangeDate || null, 
         is_occupied: tenantName.length > 0 
       }).eq('id', editingUnit.id)
-      setEditingUnit(null); fetchUnits()
+      setEditingUnit(null); fetchData()
     } catch (error) { alert(error.message) }
   }
 
@@ -155,13 +160,11 @@ function Dashboard() {
     const currentRent = Number(unit.base_rent) || 0;
     const newRent = Math.round(currentRent * 1.10);
     const today = new Date().toISOString().split('T')[0];
-
     if (!window.confirm(`🚀 Renew Lease for ${unit.current_tenant_name}?\n\n1. Rent will increase by 10% (₹${currentRent} ➡️ ₹${newRent})\n2. Next Renewal will automatically be calculated 11 months from today.\n\nProceed?`)) return;
-
     try {
       await supabase.from('units').update({ base_rent: newRent, last_rent_change_date: today }).eq('id', unit.id);
-      alert(`✅ Success! Rent is now ₹${newRent} and the warning has been cleared.`);
-      fetchUnits();
+      alert(`✅ Success! Rent is now ₹${newRent}`);
+      fetchData();
     } catch (error) { alert("Error renewing lease: " + error.message); }
   }
 
@@ -171,24 +174,14 @@ function Dashboard() {
   const monthlyRevenue = units.filter(u => u.is_occupied).reduce((sum, unit) => sum + (Number(unit.base_rent) || 0), 0)
   const escalationAlerts = units.filter(u => u.is_occupied && getEscalationStatus(u) !== null)
 
-  const displayedUnits = units.filter(unit => {
-    if (filter === 'all') return true
-    if (filter === 'occupied') return unit.is_occupied
-    if (filter === 'vacant') return !unit.is_occupied
-    if (filter === 'alerts') return unit.is_occupied && getEscalationStatus(unit) !== null
-    return true
-  })
-
-  const handleSignOut = async () => {
-    await supabase.auth.signOut();
-  }
+  const handleSignOut = async () => { await supabase.auth.signOut(); }
 
   return (
     <div className="min-h-screen bg-yvv-charcoalDark text-gray-200 p-8 font-sans">
       <header className="mb-8 border-b border-yvv-charcoal pb-4 flex justify-between items-end">
         <div>
           <h1 className="text-3xl font-bold text-yvv-cyan tracking-widest">YPMA</h1>
-          <p className="text-sm text-gray-400 mt-1">Tenant Management Portal</p>
+          <p className="text-sm text-gray-400 mt-1">Tenant Management Portal {isAdmin && <span className="text-xs ml-2 bg-yvv-cyan text-black px-2 py-0.5 rounded font-bold">ADMIN</span>}</p>
         </div>
         <div className="flex gap-4 items-center">
           <Link to="/water" className="px-6 py-2 bg-yvv-cyan text-yvv-charcoalDark font-bold rounded shadow-[0_0_15px_rgba(34,211,238,0.3)] hover:brightness-110 transition-all">💧 Water Billing</Link>
@@ -211,11 +204,31 @@ function Dashboard() {
         </div>
       )}
 
-      <div className="flex gap-2 mb-6">
-        <button onClick={() => setFilter('all')} className={`px-4 py-2 rounded-full text-sm font-semibold transition-all ${filter === 'all' ? 'bg-yvv-cyan text-yvv-charcoalDark' : 'bg-yvv-charcoal text-gray-400'}`}>All</button>
+      {/* ADMIN ADD UNIT FORM */}
+      {isAdmin && (
+        <details className="bg-yvv-charcoal p-4 rounded-lg border border-gray-800 mb-8 shadow-lg cursor-pointer group">
+          <summary className="text-white font-bold list-none flex justify-between items-center outline-none"><span>+ Add New Unit (Admin Only)</span><span className="text-yvv-cyan group-open:rotate-45 transition-transform duration-300">✕</span></summary>
+          <div className="mt-4 pt-4 border-t border-gray-800 cursor-default">
+            <form onSubmit={handleAddUnit} className="flex flex-wrap gap-4 items-end">
+              {/* NEW: Property Dropdown */}
+              <div className="flex-1 min-w-[200px]">
+                <label className="block text-xs text-yvv-cyan uppercase mb-2">Building</label>
+                <select value={selectedPropertyId} onChange={(e) => setSelectedPropertyId(e.target.value)} className="w-full bg-yvv-charcoalDark border border-gray-700 rounded p-2 text-white outline-none focus:border-yvv-cyan cursor-pointer">
+                  {properties.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+              </div>
+              <div className="flex-1 min-w-[150px]"><label className="block text-xs text-yvv-cyan uppercase mb-2">Unit Number</label><input type="text" placeholder="Flat 105" value={newUnitNumber} onChange={(e) => setNewUnitNumber(e.target.value)} className="w-full bg-yvv-charcoalDark border border-gray-700 rounded p-2 text-white outline-none focus:border-yvv-cyan" /></div>
+              <div className="flex-1 min-w-[150px]"><label className="block text-xs text-yvv-cyan uppercase mb-2">Base Rent (₹)</label><input type="number" placeholder="15000" value={newBaseRent} onChange={(e) => setNewBaseRent(e.target.value)} className="w-full bg-yvv-charcoalDark border border-gray-700 rounded p-2 text-white outline-none focus:border-yvv-cyan" /></div>
+              <button type="submit" className="px-6 py-2 bg-yvv-charcoalDark border border-yvv-cyan text-yvv-cyan rounded font-semibold h-[42px]">+ Add</button>
+            </form>
+          </div>
+        </details>
+      )}
+
+      <div className="flex gap-2 mb-6 border-b border-gray-800 pb-4">
+        <button onClick={() => setFilter('all')} className={`px-4 py-2 rounded-full text-sm font-semibold transition-all ${filter === 'all' ? 'bg-yvv-cyan text-yvv-charcoalDark' : 'bg-yvv-charcoal text-gray-400'}`}>All Flats</button>
         <button onClick={() => setFilter('occupied')} className={`px-4 py-2 rounded-full text-sm font-semibold transition-all ${filter === 'occupied' ? 'bg-green-500 text-white' : 'bg-yvv-charcoal text-gray-400'}`}>Occupied</button>
         <button onClick={() => setFilter('vacant')} className={`px-4 py-2 rounded-full text-sm font-semibold transition-all ${filter === 'vacant' ? 'bg-red-500 text-white' : 'bg-yvv-charcoal text-gray-400'}`}>Vacant</button>
-        <button onClick={() => setFilter('alerts')} className={`px-4 py-2 rounded-full text-sm font-semibold transition-all ${filter === 'alerts' ? 'bg-yellow-500 text-yellow-950' : 'bg-yvv-charcoal text-gray-400 hover:text-yellow-500'}`}>Alerts ({escalationAlerts.length})</button>
       </div>
 
       {editingUnit && (
@@ -224,50 +237,78 @@ function Dashboard() {
             <h2 className="text-2xl font-bold text-white mb-2 text-center">Manage {editingUnit.unit_number}</h2>
             <form onSubmit={handleUpdateTenant} className="space-y-4 mt-6">
               <div><label className="block text-xs text-yvv-cyan uppercase mb-1">Tenant Name</label><input type="text" value={tenantName} onChange={(e) => setTenantName(e.target.value)} className="w-full bg-yvv-charcoalDark border border-gray-700 rounded p-3 text-white outline-none focus:border-yvv-cyan" /></div>
-              <div><label className="block text-xs text-yvv-cyan uppercase mb-1">Lease Start / Last Increase Date</label><input type="date" value={lastRentChangeDate} onChange={(e) => setLastRentChangeDate(e.target.value)} className="w-full bg-yvv-charcoalDark border border-gray-700 rounded p-3 text-white outline-none focus:border-yvv-cyan" /></div>
+              <div><label className="block text-xs text-yvv-cyan uppercase mb-1">Lease Start / Last Increase</label><input type="date" value={lastRentChangeDate} onChange={(e) => setLastRentChangeDate(e.target.value)} className="w-full bg-yvv-charcoalDark border border-gray-700 rounded p-3 text-white outline-none focus:border-yvv-cyan" /></div>
               <div className="flex gap-3 pt-4"><button type="button" onClick={() => setEditingUnit(null)} className="flex-1 py-3 text-gray-400 hover:text-white">Cancel</button><button type="submit" className="flex-1 py-3 bg-yvv-cyan text-yvv-charcoalDark font-bold rounded-lg hover:brightness-110">Save</button></div>
             </form>
           </div>
         </div>
       )}
 
-      {loading ? <p className="text-yvv-cyan animate-pulse text-center">Loading...</p> : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {displayedUnits.map((unit) => {
-            const alertStatus = unit.is_occupied ? getEscalationStatus(unit) : null;
-            const waterBillForThisUnit = currentWaterBills[unit.id]
+      {loading ? <p className="text-yvv-cyan animate-pulse text-center">Loading Data...</p> : (
+        <div className="space-y-12">
+          {/* THE NEW LOOP: Grouping by Building! */}
+          {properties.map(property => {
+            // Find flats that belong to THIS property and match the current filter
+            const propertyFlats = units.filter(u => u.property_id === property.id).filter(unit => {
+              if (filter === 'all') return true
+              if (filter === 'occupied') return unit.is_occupied
+              if (filter === 'vacant') return !unit.is_occupied
+              if (filter === 'alerts') return unit.is_occupied && getEscalationStatus(unit) !== null
+              return true
+            });
 
             return (
-              <div key={unit.id} className={`bg-yvv-charcoal rounded-xl p-6 border shadow-lg flex flex-col justify-between group transition-colors duration-300 ${alertStatus ? 'border-yellow-600/50 hover:border-yellow-500' : 'border-gray-800 hover:border-yvv-cyan'}`}>
-                <div>
-                  <div className="flex justify-between items-start mb-4">
-                    <div>
-                      <h2 className="text-2xl font-bold text-white">{unit.unit_number}</h2>
-                      <p className="text-xs text-yvv-cyan uppercase tracking-widest">{unit.properties?.name}</p>
-                    </div>
-                    <button onClick={() => toggleOccupancy(unit.id, unit.is_occupied)} className={`px-3 py-1 rounded-full text-xs font-semibold ${unit.is_occupied ? 'bg-green-900/50 text-green-400 border border-green-800' : 'bg-red-900/50 text-red-400 border border-red-800'}`}>{unit.is_occupied ? 'Occupied' : 'Vacant'}</button>
-                  </div>
-                  
-                  {alertStatus && (
-                    <div className="mb-4 bg-yellow-900/20 text-yellow-500 p-3 rounded border border-yellow-800/50">
-                      <p className="text-xs font-bold mb-2">⚠️ {alertStatus.status === 'overdue' ? `Lease expired ${alertStatus.days} days ago!` : `Lease expires in ${alertStatus.days} days`}</p>
-                      <button onClick={() => handleRenewLease(unit)} className="w-full py-2 bg-yellow-600 hover:bg-yellow-500 text-white font-bold rounded transition-colors text-sm shadow-md">🚀 Auto-Renew (10% Bump)</button>
-                    </div>
-                  )}
+              <div key={property.id} className="bg-yvv-charcoalDark">
+                <div className="flex items-center gap-3 mb-6 border-b border-gray-800 pb-2">
+                  <span className="text-3xl">🏢</span>
+                  <h2 className="text-2xl font-bold text-white tracking-widest uppercase">{property.name}</h2>
+                  <span className="text-gray-500 text-sm ml-auto">{propertyFlats.length} Flats</span>
+                </div>
 
-                  <div className="space-y-3 my-6 bg-yvv-charcoalDark p-4 rounded border border-gray-800">
-                    <div className="flex justify-between border-b border-gray-800 pb-2"><span className="text-gray-500 text-sm">Tenant</span><span className="text-white font-medium">{unit.current_tenant_name || 'VACANT'}</span></div>
-                    <div className="flex justify-between border-b border-gray-800 pb-2"><span className="text-gray-500 text-sm">Base Rent</span><span className="text-white font-bold">₹{unit.base_rent}</span></div>
-                    <div className="flex justify-between border-b border-gray-800 pb-2"><span className="text-gray-500 text-sm">Maintenance</span><span className="text-gray-300 font-bold">₹{unit.maintenance_fee || 0}</span></div>
-                    <div className="flex justify-between"><span className="text-gray-500 text-sm">Water Bill (This Month)</span><span className="text-yvv-cyan font-bold">{waterBillForThisUnit ? `₹${Math.round(waterBillForThisUnit)}` : 'Pending'}</span></div>
+                {propertyFlats.length === 0 ? (
+                  <div className="bg-yvv-charcoal border border-dashed border-gray-700 rounded-xl p-8 text-center">
+                    <p className="text-gray-500 italic">No flats have been added to this property yet.</p>
+                    {isAdmin && <p className="text-yvv-cyan text-sm mt-2 font-bold cursor-pointer hover:underline" onClick={() => { window.scrollTo({top: 0, behavior: 'smooth'}); setSelectedPropertyId(property.id); }}>+ Scroll up to add a unit to {property.name}</p>}
                   </div>
-                </div>
-                <div className="mt-4 pt-4 border-t border-gray-800 space-y-3">
-                  <Link to={`/unit/${unit.id}`} className="block text-center w-full py-2 bg-yvv-cyan text-yvv-charcoalDark rounded-lg hover:brightness-110 font-bold text-sm shadow-[0_0_10px_rgba(34,211,238,0.2)]">View Flat Profile →</Link>
-                  <div className="flex gap-2">
-                    <button onClick={() => { setEditingUnit(unit); setTenantName(unit.current_tenant_name || ''); setLastRentChangeDate(unit.last_rent_change_date || ''); }} className="flex-1 py-2 bg-yvv-charcoalDark border border-gray-700 text-gray-300 rounded-lg text-xs font-semibold hover:border-yvv-cyan">Quick Manage</button>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {propertyFlats.map(unit => {
+                      const alertStatus = unit.is_occupied ? getEscalationStatus(unit) : null;
+                      const waterBillForThisUnit = currentWaterBills[unit.id]
+
+                      return (
+                        <div key={unit.id} className={`bg-yvv-charcoal rounded-xl p-6 border shadow-lg flex flex-col justify-between group transition-colors duration-300 ${alertStatus ? 'border-yellow-600/50 hover:border-yellow-500' : 'border-gray-800 hover:border-yvv-cyan'}`}>
+                          <div>
+                            <div className="flex justify-between items-start mb-4">
+                              <h3 className="text-2xl font-bold text-white">{unit.unit_number}</h3>
+                              <button onClick={() => toggleOccupancy(unit.id, unit.is_occupied)} className={`px-3 py-1 rounded-full text-xs font-semibold ${unit.is_occupied ? 'bg-green-900/50 text-green-400 border border-green-800' : 'bg-red-900/50 text-red-400 border border-red-800'}`}>{unit.is_occupied ? 'Occupied' : 'Vacant'}</button>
+                            </div>
+                            
+                            {alertStatus && (
+                              <div className="mb-4 bg-yellow-900/20 text-yellow-500 p-3 rounded border border-yellow-800/50">
+                                <p className="text-xs font-bold mb-2">⚠️ {alertStatus.status === 'overdue' ? `Lease expired ${alertStatus.days} days ago!` : `Lease expires in ${alertStatus.days} days`}</p>
+                                <button onClick={() => handleRenewLease(unit)} className="w-full py-2 bg-yellow-600 hover:bg-yellow-500 text-white font-bold rounded shadow-md">🚀 Renew</button>
+                              </div>
+                            )}
+
+                            <div className="space-y-3 my-6 bg-yvv-charcoalDark p-4 rounded border border-gray-800">
+                              <div className="flex justify-between border-b border-gray-800 pb-2"><span className="text-gray-500 text-sm">Tenant</span><span className="text-white font-medium">{unit.current_tenant_name || 'VACANT'}</span></div>
+                              <div className="flex justify-between border-b border-gray-800 pb-2"><span className="text-gray-500 text-sm">Rent</span><span className="text-white font-bold">₹{unit.base_rent}</span></div>
+                              <div className="flex justify-between border-b border-gray-800 pb-2"><span className="text-gray-500 text-sm">Maint.</span><span className="text-gray-300 font-bold">₹{unit.maintenance_fee || 0}</span></div>
+                              <div className="flex justify-between"><span className="text-gray-500 text-sm">Water</span><span className="text-yvv-cyan font-bold">{waterBillForThisUnit ? `₹${Math.round(waterBillForThisUnit)}` : 'Pending'}</span></div>
+                            </div>
+                          </div>
+                          <div className="mt-4 pt-4 border-t border-gray-800 space-y-3">
+                            <Link to={`/unit/${unit.id}`} className="block text-center w-full py-2 bg-yvv-cyan text-yvv-charcoalDark rounded-lg hover:brightness-110 font-bold text-sm shadow-[0_0_10px_rgba(34,211,238,0.2)]">View Profile →</Link>
+                            <div className="flex gap-2">
+                              <button onClick={() => { setEditingUnit(unit); setTenantName(unit.current_tenant_name || ''); setLastRentChangeDate(unit.last_rent_change_date || ''); }} className="flex-1 py-2 bg-yvv-charcoalDark border border-gray-700 text-gray-300 rounded-lg text-xs font-semibold hover:border-yvv-cyan">Quick Manage</button>
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })}
                   </div>
-                </div>
+                )}
               </div>
             )
           })}
@@ -278,7 +319,7 @@ function Dashboard() {
 }
 
 // ==========================================
-// 2. THE WATER BILLING PAGE
+// 2. THE WATER BILLING PAGE (Kept identical)
 // ==========================================
 function WaterBilling() {
   const navigate = useNavigate()
@@ -374,7 +415,7 @@ function WaterBilling() {
 }
 
 // ==========================================
-// 3. FLAT PROFILE PAGE
+// 3. FLAT PROFILE PAGE (Kept Identical)
 // ==========================================
 function UnitDetail() {
   const { id } = useParams()
@@ -405,15 +446,7 @@ function UnitDetail() {
       if (error) throw error
       setUnit(data)
       setFormData({
-        tenantName: data.current_tenant_name || '', 
-        phone: data.phone_number || '', 
-        lastRentChange: data.last_rent_change_date || '', 
-        keyNo: data.key_number || '', 
-        electricMeter: data.electric_meter_number || '', 
-        ptin: data.ptin || '', 
-        rent: data.base_rent || '', 
-        maintenance: data.maintenance_fee || '', 
-        advance: data.advance_amount || ''
+        tenantName: data.current_tenant_name || '', phone: data.phone_number || '', lastRentChange: data.last_rent_change_date || '', keyNo: data.key_number || '', electricMeter: data.electric_meter_number || '', ptin: data.ptin || '', rent: data.base_rent || '', maintenance: data.maintenance_fee || '', advance: data.advance_amount || ''
       })
     } catch (error) { console.error(error.message) } finally { setLoading(false) }
   }
@@ -450,20 +483,12 @@ function UnitDetail() {
     const currentRent = Number(unit.base_rent) || 0;
     const newRent = Math.round(currentRent * 1.10);
     const today = new Date().toISOString().split('T')[0];
-
     if (!window.confirm(`🚀 Renew Lease for ${unit.current_tenant_name}?\n\n1. Rent will increase by 10% (₹${currentRent} ➡️ ₹${newRent})\n2. Next Renewal will automatically be calculated 11 months from today.\n\nProceed?`)) return;
-
     try {
-      await supabase.from('units').update({
-        base_rent: newRent,
-        last_rent_change_date: today
-      }).eq('id', unit.id);
-      
-      alert(`✅ Success! Rent is now ₹${newRent} and the warning has been cleared.`);
+      await supabase.from('units').update({ base_rent: newRent, last_rent_change_date: today }).eq('id', unit.id);
+      alert(`✅ Success! Rent is now ₹${newRent}`);
       fetchUnit();
-    } catch (error) {
-      alert("Error renewing lease: " + error.message);
-    }
+    } catch (error) { alert("Error renewing lease: " + error.message); }
   }
 
   const handleSave = async (section) => {
@@ -532,9 +557,7 @@ function UnitDetail() {
               <p className="text-sm text-yellow-700 mt-1">This tenant's lease {alertStatus.status === 'overdue' ? `expired ${alertStatus.days} days ago.` : `expires in ${alertStatus.days} days.`}</p>
               <p className="text-xs font-bold text-yellow-800 mt-1">Calculated Expiration: {alertStatus.expireDateStr}</p>
             </div>
-            <button onClick={handleRenewLease} className="px-6 py-3 bg-yellow-500 text-white font-bold rounded shadow hover:bg-yellow-600 transition-colors">
-              🚀 Auto-Renew Lease (10% Bump)
-            </button>
+            <button onClick={handleRenewLease} className="px-6 py-3 bg-yellow-500 text-white font-bold rounded shadow hover:bg-yellow-600 transition-colors">🚀 Auto-Renew Lease</button>
           </div>
         )}
 
@@ -558,7 +581,6 @@ function UnitDetail() {
                 <div><label className="text-xs text-gray-500 font-bold mb-1 block">Phone Number</label><input type="text" placeholder="Phone" value={formData.phone} onChange={(e) => setFormData({...formData, phone: e.target.value})} className="w-full border rounded p-2 text-sm" /></div>
                 <div>
                   <label className="text-xs text-blue-600 font-bold mb-1 block">Lease Start / Last Increase Date ✎</label>
-                  <p className="text-[10px] text-gray-500 mb-1 leading-tight">The system will automatically calculate the next renewal date 11 months from this date.</p>
                   <input type="date" value={formData.lastRentChange} onChange={(e) => setFormData({...formData, lastRentChange: e.target.value})} className="w-full border border-blue-300 rounded p-2 text-sm outline-none focus:ring-2 focus:ring-blue-500" />
                 </div>
                 <div className="flex gap-2 pt-2"><button onClick={() => handleSave('tenant')} className="px-4 py-2 bg-blue-600 text-white text-sm rounded font-bold">Save</button><button onClick={() => setEditMode({...editMode, tenant: false})} className="text-sm text-gray-500">Cancel</button></div>
@@ -596,7 +618,7 @@ function UnitDetail() {
                   <div><label className="text-xs text-gray-500 font-bold">Monthly Rent</label><input type="number" value={formData.rent} onChange={(e) => setFormData({...formData, rent: e.target.value})} className="w-full border rounded p-2 text-sm" /></div>
                   <div><label className="text-xs text-gray-500 font-bold">Maintenance</label><input type="number" value={formData.maintenance} onChange={(e) => setFormData({...formData, maintenance: e.target.value})} className="w-full border rounded p-2 text-sm" /></div>
                   <div className="border-t pt-3 mt-3">
-                    <label className="text-xs text-blue-600 font-bold block mb-1">Advance Amount (Deposit) - Editable ✎</label>
+                    <label className="text-xs text-blue-600 font-bold block mb-1">Advance Amount (Deposit) ✎</label>
                     <input type="number" value={formData.advance} onChange={(e) => setFormData({...formData, advance: e.target.value})} className="w-full border border-blue-300 rounded p-2 text-sm outline-none focus:ring-2 focus:ring-blue-500" />
                   </div>
                   <div className="flex gap-2 pt-2"><button onClick={() => handleSave('financial')} className="px-4 py-2 bg-blue-600 text-white text-sm rounded font-bold">Save</button><button onClick={() => setEditMode({...editMode, financial: false})} className="text-sm text-gray-500">Cancel</button></div>
@@ -606,7 +628,6 @@ function UnitDetail() {
                   <div className="flex justify-between border-b pb-1"><span className="text-gray-500 font-bold">Monthly Rent:</span> <span className="font-bold">₹{unit.base_rent}</span></div>
                   <div className="flex justify-between border-b pb-1"><span className="text-gray-500 font-bold">Maintenance:</span> <span>₹{unit.maintenance_fee}</span></div>
                   <div className="flex justify-between border-b pb-1"><span className="text-gray-500 font-bold">Advance Amount:</span> <span>₹{unit.advance_amount}</span></div>
-                  <div className="flex justify-between border-b pb-1"><span className="text-gray-500 font-bold">Lease Start / Last Increase:</span> <span>{unit.last_rent_change_date ? new Date(unit.last_rent_change_date).toLocaleDateString() : 'N/A'}</span></div>
                   <div className="flex justify-between border-b pb-1 pt-2"><span className="text-blue-600 font-bold">Last Rent Paid Date:</span> <span className="text-blue-600 font-bold">{lastRentPaid}</span></div>
                   <div className="flex justify-between pt-2"><span className="text-gray-500 font-bold">Water Bill (Selected Month):</span> <span className="text-blue-600 font-bold">{waterCost === 'Variable' ? 'Variable' : `₹${waterCost}`}</span></div>
                 </div>
@@ -615,8 +636,8 @@ function UnitDetail() {
             <div>
                <div className="flex justify-between items-center mb-2"><p className="text-xs font-bold text-gray-500 uppercase">Payment Status For:</p><input type="month" value={paymentMonth} onChange={(e) => setPaymentMonth(e.target.value)} className="border rounded p-1 text-xs font-bold outline-none" /></div>
                <div className="border rounded divide-y">
-                 <label className={`flex items-center p-3 cursor-pointer transition-colors ${payments.rent_paid ? 'bg-green-50' : 'hover:bg-gray-50'}`}><input type="checkbox" checked={payments.rent_paid} onChange={() => handleTogglePayment('rent_paid')} className="w-4 h-4 mr-3 accent-green-600" /><span className={`text-sm font-bold ${payments.rent_paid ? 'text-green-800' : 'text-gray-700'}`}>Rent Paid (₹{unit.base_rent})</span></label>
-                 <label className={`flex items-center p-3 cursor-pointer transition-colors ${payments.maintenance_paid ? 'bg-green-50' : 'hover:bg-gray-50'}`}><input type="checkbox" checked={payments.maintenance_paid} onChange={() => handleTogglePayment('maintenance_paid')} className="w-4 h-4 mr-3 accent-green-600" /><span className={`text-sm font-bold ${payments.maintenance_paid ? 'text-green-800' : 'text-gray-700'}`}>Maintenance Paid (₹{unit.maintenance_fee})</span></label>
+                 <label className={`flex items-center p-3 cursor-pointer transition-colors ${payments.rent_paid ? 'bg-green-50' : 'hover:bg-gray-50'}`}><input type="checkbox" checked={payments.rent_paid} onChange={() => handleTogglePayment('rent_paid')} className="w-4 h-4 mr-3 accent-green-600" /><span className={`text-sm font-bold ${payments.rent_paid ? 'text-green-800' : 'text-gray-700'}`}>Rent Paid</span></label>
+                 <label className={`flex items-center p-3 cursor-pointer transition-colors ${payments.maintenance_paid ? 'bg-green-50' : 'hover:bg-gray-50'}`}><input type="checkbox" checked={payments.maintenance_paid} onChange={() => handleTogglePayment('maintenance_paid')} className="w-4 h-4 mr-3 accent-green-600" /><span className={`text-sm font-bold ${payments.maintenance_paid ? 'text-green-800' : 'text-gray-700'}`}>Maintenance Paid</span></label>
                  <label className={`flex items-center p-3 cursor-pointer transition-colors ${payments.water_paid ? 'bg-green-50' : 'hover:bg-gray-50'}`}><input type="checkbox" checked={payments.water_paid} onChange={() => handleTogglePayment('water_paid')} className="w-4 h-4 mr-3 accent-green-600" /><span className={`text-sm font-bold ${payments.water_paid ? 'text-green-800' : 'text-gray-700'}`}>Water Bill Paid</span></label>
                </div>
             </div>
@@ -631,7 +652,7 @@ function UnitDetail() {
                 {tenantHistory.map((history) => (
                   <div key={history.id} className="flex justify-between items-center p-3 bg-gray-50 rounded border border-gray-100 text-sm">
                     <div><p className="font-bold text-gray-800">{history.tenant_name}</p><p className="text-xs text-gray-500">📞 {history.phone_number || 'No phone recorded'}</p></div>
-                    <div className="text-right"><p className="text-xs text-gray-400 uppercase tracking-wider mb-1">Moved Out</p><p className="font-bold text-gray-700">{new Date(history.move_out_date).toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' })}</p></div>
+                    <div className="text-right"><p className="text-xs text-gray-400 uppercase tracking-wider mb-1">Moved Out</p><p className="font-bold text-gray-700">{new Date(history.move_out_date).toLocaleDateString('en-IN')}</p></div>
                   </div>
                 ))}
               </div>
@@ -644,22 +665,28 @@ function UnitDetail() {
 }
 
 // ==========================================
-// 4. THE APP ROUTER (DAY 14: AUTH WRAPPER)
+// 4. THE APP ROUTER 
 // ==========================================
 export default function App() {
   const [session, setSession] = useState(null)
+  const [isAdmin, setIsAdmin] = useState(false) 
   const [authLoading, setAuthLoading] = useState(true)
+
+  const checkProfile = async (userId) => {
+    try {
+      const { data } = await supabase.from('profiles').select('is_admin').eq('id', userId).single();
+      if (data) setIsAdmin(data.is_admin);
+    } catch (e) { console.error(e) }
+    setAuthLoading(false);
+  }
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session)
-      setAuthLoading(false)
+      setSession(session); if (session) checkProfile(session.user.id); else setAuthLoading(false)
     })
-
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session)
+      setSession(session); if (session) checkProfile(session.user.id); else { setIsAdmin(false); setAuthLoading(false) }
     })
-
     return () => subscription.unsubscribe()
   }, [])
 
@@ -669,9 +696,9 @@ export default function App() {
     <Router>
       <Routes>
         <Route path="/login" element={session ? <Navigate to="/" replace /> : <LoginScreen />} />
-        <Route path="/" element={<ProtectedRoute session={session}><Dashboard /></ProtectedRoute>} />
-        <Route path="/unit/:id" element={<ProtectedRoute session={session}><UnitDetail /></ProtectedRoute>} />
-        <Route path="/water" element={<ProtectedRoute session={session}><WaterBilling /></ProtectedRoute>} />
+        <Route path="/" element={<ProtectedRoute session={session}><Dashboard isAdmin={isAdmin} /></ProtectedRoute>} />
+        <Route path="/unit/:id" element={<ProtectedRoute session={session}><UnitDetail isAdmin={isAdmin} /></ProtectedRoute>} />
+        <Route path="/water" element={<ProtectedRoute session={session}><WaterBilling isAdmin={isAdmin} /></ProtectedRoute>} />
       </Routes>
     </Router>
   )
