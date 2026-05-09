@@ -44,7 +44,7 @@ function LoginScreen() {
         <form onSubmit={handleAuth} className="space-y-6">
           <div>
             <label className="block text-xs text-yvv-cyan uppercase tracking-wider mb-2 font-bold">Username or Email</label>
-            <input type="text" required value={email} onChange={(e) => setEmail(e.target.value)} className="w-full bg-yvv-charcoalDark border border-gray-700 rounded p-3 text-white outline-none focus:border-yvv-cyan transition-colors" placeholder="username" />
+            <input type="text" required value={email} onChange={(e) => setEmail(e.target.value)} className="w-full bg-yvv-charcoalDark border border-gray-700 rounded p-3 text-white outline-none focus:border-yvv-cyan transition-colors" placeholder="e.g., admin or annapoorna" />
           </div>
           <div>
             <label className="block text-xs text-yvv-cyan uppercase tracking-wider mb-2 font-bold">Password</label>
@@ -72,16 +72,15 @@ function ProtectedRoute({ session, children }) {
 }
 
 // ==========================================
-// 1. THE MAIN DASHBOARD PAGE (UPDATED GROUPING UI)
+// 1. THE MAIN DASHBOARD PAGE
 // ==========================================
-function Dashboard({ isAdmin }) {
-  const [properties, setProperties] = useState([]) // NEW: Stores the buildings
+function Dashboard({ isAdmin, displayName }) {
+  const [properties, setProperties] = useState([]) 
   const [units, setUnits] = useState([])
   const [loading, setLoading] = useState(true)
   const [editingUnit, setEditingUnit] = useState(null)
   const [filter, setFilter] = useState('all')
 
-  // NEW: Dropdown selection for Admin
   const [selectedPropertyId, setSelectedPropertyId] = useState('') 
   const [newUnitNumber, setNewUnitNumber] = useState('')
   const [newBaseRent, setNewBaseRent] = useState('')
@@ -89,32 +88,40 @@ function Dashboard({ isAdmin }) {
   const [lastRentChangeDate, setLastRentChangeDate] = useState('')
 
   const [currentWaterBills, setCurrentWaterBills] = useState({})
+  // NEW: State to hold current month payment status
+  const [currentPayments, setCurrentPayments] = useState({})
 
   useEffect(() => { fetchData() }, [])
 
   const fetchData = async () => {
     try {
-      // 1. Fetch buildings the user is allowed to see
       const { data: propData, error: propError } = await supabase.from('properties').select('*').order('name', { ascending: true })
       if (propError) throw propError
       setProperties(propData)
-      
-      // Auto-select the first property in the dropdown for convenience
       if (propData.length > 0) setSelectedPropertyId(propData[0].id)
 
-      // 2. Fetch flats
       const { data: unitData, error: unitError } = await supabase.from('units').select(`*, properties(name)`).order('unit_number', { ascending: true })
       if (unitError) throw unitError
       setUnits(unitData)
 
-      // 3. Fetch water bills
       const currentMonth = new Date().toISOString().slice(0, 7)
+      
+      // Fetch Water Bills
       const { data: waterData } = await supabase.from('unit_water_readings').select('unit_id, flat_bill_amount').eq('billing_month', currentMonth)
       if (waterData) {
         const billsMap = {}
-        waterData.forEach(bill => billsMap[bill.unit_id] = bill.flat_bill_amount)
+        waterData.forEach(bill => billsMap[bill.unit_id] = { amount: bill.flat_bill_amount })
         setCurrentWaterBills(billsMap)
       }
+
+      // NEW: Fetch Payment Status for the current month!
+      const { data: payData } = await supabase.from('payments').select('*').eq('payment_month', currentMonth)
+      if (payData) {
+        const payMap = {}
+        payData.forEach(p => payMap[p.unit_id] = p)
+        setCurrentPayments(payMap)
+      }
+
     } catch (error) { console.error(error.message) } finally { setLoading(false) }
   }
 
@@ -122,9 +129,10 @@ function Dashboard({ isAdmin }) {
     e.preventDefault()
     if (!selectedPropertyId || !newUnitNumber || !newBaseRent) return alert("Please fill out all fields and select a property.")
     try {
-      await supabase.from('units').insert([{ property_id: selectedPropertyId, unit_number: newUnitNumber, base_rent: newBaseRent }])
-      setNewUnitNumber(''); setNewBaseRent(''); fetchData() // Refresh all data
-    } catch (error) { alert(error.message) }
+      const { error } = await supabase.from('units').insert([{ property_id: selectedPropertyId, unit_number: newUnitNumber, base_rent: newBaseRent }])
+      if (error) throw error
+      setNewUnitNumber(''); setNewBaseRent(''); fetchData() 
+    } catch (error) { alert("Database Error: " + error.message) }
   }
 
   const toggleOccupancy = async (id, currentStatus) => {
@@ -149,10 +157,7 @@ function Dashboard({ isAdmin }) {
     const lastChange = new Date(unit.last_rent_change_date);
     const expirationDate = new Date(lastChange.setMonth(lastChange.getMonth() + 11));
     const diffDays = Math.ceil((expirationDate - today) / (1000 * 60 * 60 * 24));
-    
-    if (diffDays <= 30) {
-      return { status: diffDays < 0 ? 'overdue' : 'due_soon', days: Math.abs(diffDays), expireDateStr: expirationDate.toLocaleDateString() }
-    }
+    if (diffDays <= 30) return { status: diffDays < 0 ? 'overdue' : 'due_soon', days: Math.abs(diffDays), expireDateStr: expirationDate.toLocaleDateString() }
     return null;
   }
 
@@ -176,15 +181,22 @@ function Dashboard({ isAdmin }) {
 
   const handleSignOut = async () => { await supabase.auth.signOut(); }
 
+  const showWaterButton = isAdmin || properties.some(p => p.requires_water_billing);
+
   return (
     <div className="min-h-screen bg-yvv-charcoalDark text-gray-200 p-8 font-sans">
       <header className="mb-8 border-b border-yvv-charcoal pb-4 flex justify-between items-end">
         <div>
-          <h1 className="text-3xl font-bold text-yvv-cyan tracking-widest">YPMA</h1>
-          <p className="text-sm text-gray-400 mt-1">Tenant Management Portal {isAdmin && <span className="text-xs ml-2 bg-yvv-cyan text-black px-2 py-0.5 rounded font-bold">ADMIN</span>}</p>
+          <h1 className="text-3xl font-bold text-yvv-cyan tracking-widest flex items-center gap-2">
+            Welcome, {displayName || 'User'} 
+            {isAdmin && <span className="text-[10px] bg-yvv-cyan text-black px-2 py-0.5 rounded font-bold uppercase tracking-widest">Admin</span>}
+          </h1>
+          <p className="text-sm text-gray-400 mt-1">Tenant Management Portal</p>
         </div>
         <div className="flex gap-4 items-center">
-          <Link to="/water" className="px-6 py-2 bg-yvv-cyan text-yvv-charcoalDark font-bold rounded shadow-[0_0_15px_rgba(34,211,238,0.3)] hover:brightness-110 transition-all">💧 Water Billing</Link>
+          {showWaterButton && (
+            <Link to="/water" className="px-6 py-2 bg-yvv-cyan text-yvv-charcoalDark font-bold rounded shadow-[0_0_15px_rgba(34,211,238,0.3)] hover:brightness-110 transition-all">💧 Water Billing</Link>
+          )}
           <button onClick={handleSignOut} className="px-4 py-2 border border-gray-700 text-gray-400 font-bold rounded hover:bg-red-900/30 hover:text-red-400 hover:border-red-800 transition-all">Exit 🔒</button>
         </div>
       </header>
@@ -204,13 +216,11 @@ function Dashboard({ isAdmin }) {
         </div>
       )}
 
-      {/* ADMIN ADD UNIT FORM */}
       {isAdmin && (
         <details className="bg-yvv-charcoal p-4 rounded-lg border border-gray-800 mb-8 shadow-lg cursor-pointer group">
           <summary className="text-white font-bold list-none flex justify-between items-center outline-none"><span>+ Add New Unit (Admin Only)</span><span className="text-yvv-cyan group-open:rotate-45 transition-transform duration-300">✕</span></summary>
           <div className="mt-4 pt-4 border-t border-gray-800 cursor-default">
             <form onSubmit={handleAddUnit} className="flex flex-wrap gap-4 items-end">
-              {/* NEW: Property Dropdown */}
               <div className="flex-1 min-w-[200px]">
                 <label className="block text-xs text-yvv-cyan uppercase mb-2">Building</label>
                 <select value={selectedPropertyId} onChange={(e) => setSelectedPropertyId(e.target.value)} className="w-full bg-yvv-charcoalDark border border-gray-700 rounded p-2 text-white outline-none focus:border-yvv-cyan cursor-pointer">
@@ -246,9 +256,7 @@ function Dashboard({ isAdmin }) {
 
       {loading ? <p className="text-yvv-cyan animate-pulse text-center">Loading Data...</p> : (
         <div className="space-y-12">
-          {/* THE NEW LOOP: Grouping by Building! */}
           {properties.map(property => {
-            // Find flats that belong to THIS property and match the current filter
             const propertyFlats = units.filter(u => u.property_id === property.id).filter(unit => {
               if (filter === 'all') return true
               if (filter === 'occupied') return unit.is_occupied
@@ -274,7 +282,10 @@ function Dashboard({ isAdmin }) {
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {propertyFlats.map(unit => {
                       const alertStatus = unit.is_occupied ? getEscalationStatus(unit) : null;
-                      const waterBillForThisUnit = currentWaterBills[unit.id]
+                      const waterData = currentWaterBills[unit.id] || {};
+                      
+                      // Identify payment status, default to unpaid (false) if no record exists
+                      const payment = currentPayments[unit.id] || { rent_paid: false, maintenance_paid: false, water_paid: false };
 
                       return (
                         <div key={unit.id} className={`bg-yvv-charcoal rounded-xl p-6 border shadow-lg flex flex-col justify-between group transition-colors duration-300 ${alertStatus ? 'border-yellow-600/50 hover:border-yellow-500' : 'border-gray-800 hover:border-yvv-cyan'}`}>
@@ -291,11 +302,26 @@ function Dashboard({ isAdmin }) {
                               </div>
                             )}
 
+                            {/* UPDATED: Red (Unpaid) / Blue (Paid) Dashboard Finances! */}
                             <div className="space-y-3 my-6 bg-yvv-charcoalDark p-4 rounded border border-gray-800">
-                              <div className="flex justify-between border-b border-gray-800 pb-2"><span className="text-gray-500 text-sm">Tenant</span><span className="text-white font-medium">{unit.current_tenant_name || 'VACANT'}</span></div>
-                              <div className="flex justify-between border-b border-gray-800 pb-2"><span className="text-gray-500 text-sm">Rent</span><span className="text-white font-bold">₹{unit.base_rent}</span></div>
-                              <div className="flex justify-between border-b border-gray-800 pb-2"><span className="text-gray-500 text-sm">Maint.</span><span className="text-gray-300 font-bold">₹{unit.maintenance_fee || 0}</span></div>
-                              <div className="flex justify-between"><span className="text-gray-500 text-sm">Water</span><span className="text-yvv-cyan font-bold">{waterBillForThisUnit ? `₹${Math.round(waterBillForThisUnit)}` : 'Pending'}</span></div>
+                              <div className="flex justify-between border-b border-gray-800 pb-2">
+                                <span className="text-gray-500 text-sm">Tenant</span>
+                                <span className="text-white font-medium">{unit.current_tenant_name || 'VACANT'}</span>
+                              </div>
+                              <div className="flex justify-between border-b border-gray-800 pb-2">
+                                <span className="text-gray-500 text-sm">Rent</span>
+                                <span className={`font-bold ${payment.rent_paid ? 'text-blue-400' : 'text-red-500'}`}>₹{unit.base_rent}</span>
+                              </div>
+                              <div className="flex justify-between border-b border-gray-800 pb-2">
+                                <span className="text-gray-500 text-sm">Maint.</span>
+                                <span className={`font-bold ${payment.maintenance_paid ? 'text-blue-400' : 'text-red-500'}`}>₹{unit.maintenance_fee || 0}</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-gray-500 text-sm">Water</span>
+                                <span className={`font-bold ${payment.water_paid ? 'text-blue-400' : (waterData.amount !== undefined ? 'text-red-500' : 'text-gray-500')}`}>
+                                  {waterData.amount !== undefined ? `₹${Math.round(waterData.amount)}` : 'Pending'}
+                                </span>
+                              </div>
                             </div>
                           </div>
                           <div className="mt-4 pt-4 border-t border-gray-800 space-y-3">
@@ -319,9 +345,9 @@ function Dashboard({ isAdmin }) {
 }
 
 // ==========================================
-// 2. THE WATER BILLING PAGE (Kept identical)
+// 2. THE WATER BILLING PAGE 
 // ==========================================
-function WaterBilling() {
+function WaterBilling({ isAdmin }) {
   const navigate = useNavigate()
   const [units, setUnits] = useState([])
   const [loading, setLoading] = useState(true)
@@ -330,13 +356,26 @@ function WaterBilling() {
   const [tankerCharges, setTankerCharges] = useState('')
   const [electricityBill, setElectricityBill] = useState('')
   const [readings, setReadings] = useState({})
+  const [authError, setAuthError] = useState(false) 
 
   useEffect(() => { fetchUnits() }, [])
 
   const fetchUnits = async () => {
     try {
-      const { data, error } = await supabase.from('units').select('id, unit_number, current_tenant_name, property_id').eq('is_occupied', true).order('unit_number', { ascending: true })
-      if (error) throw error; setUnits(data); const initialReadings = {}; data.forEach(unit => { initialReadings[unit.id] = { previous: 0, current: 0 } }); setReadings(initialReadings)
+      const { data: propData } = await supabase.from('properties').select('id, requires_water_billing')
+      const allowedPropertyIds = propData.filter(p => p.requires_water_billing || isAdmin).map(p => p.id)
+
+      if (allowedPropertyIds.length === 0) {
+        setAuthError(true); return;
+      }
+
+      const { data, error } = await supabase.from('units').select('id, unit_number, current_tenant_name, property_id').eq('is_occupied', true).in('property_id', allowedPropertyIds).order('unit_number', { ascending: true })
+      if (error) throw error; 
+      
+      setUnits(data); 
+      const initialReadings = {}; 
+      data.forEach(unit => { initialReadings[unit.id] = { previous: 0, current: 0 } }); 
+      setReadings(initialReadings)
     } catch (error) { console.error(error.message) } finally { setLoading(false) }
   }
 
@@ -357,6 +396,8 @@ function WaterBilling() {
       await Promise.all(unitPromises); alert("✅ All water readings saved!");
     } catch (error) { alert("Error saving data: " + error.message); }
   }
+
+  if (authError) return <div className="min-h-screen bg-yvv-charcoalDark flex flex-col items-center justify-center text-red-500 p-4"><h1 className="text-2xl font-bold mb-4">Access Denied</h1><p>Your property is not configured for water billing.</p><button onClick={() => navigate('/')} className="mt-6 px-4 py-2 bg-yvv-charcoal border border-red-500 rounded text-white">Return to Dashboard</button></div>
 
   return (
     <div className="min-h-screen bg-yvv-charcoalDark text-gray-200 p-8 font-sans pb-24">
@@ -415,7 +456,7 @@ function WaterBilling() {
 }
 
 // ==========================================
-// 3. FLAT PROFILE PAGE (Kept Identical)
+// 3. FLAT PROFILE PAGE 
 // ==========================================
 function UnitDetail() {
   const { id } = useParams()
@@ -429,6 +470,7 @@ function UnitDetail() {
   const [paymentMonth, setPaymentMonth] = useState(new Date().toISOString().slice(0, 7))
   const [payments, setPayments] = useState({ rent_paid: false, maintenance_paid: false, water_paid: false })
   const [waterCost, setWaterCost] = useState('Variable')
+  const [waterReading, setWaterReading] = useState('No Record') // NEW: Store the actual meter unit number
   const [tenantHistory, setTenantHistory] = useState([])
   const [lastRentPaid, setLastRentPaid] = useState('Checking...')
 
@@ -513,10 +555,15 @@ function UnitDetail() {
 
   const fetchWaterBill = async () => {
     try {
-      const { data } = await supabase.from('unit_water_readings').select('flat_bill_amount').eq('unit_id', id).eq('billing_month', paymentMonth).single()
-      if (data) setWaterCost(Math.round(data.flat_bill_amount))
-      else setWaterCost('Variable')
-    } catch (err) { setWaterCost('Variable') }
+      // UPDATED: Now fetches 'current_reading' too!
+      const { data } = await supabase.from('unit_water_readings').select('flat_bill_amount, current_reading').eq('unit_id', id).eq('billing_month', paymentMonth).single()
+      if (data) {
+        setWaterCost(Math.round(data.flat_bill_amount))
+        setWaterReading(data.current_reading)
+      } else {
+        setWaterCost('Variable'); setWaterReading('No Record')
+      }
+    } catch (err) { setWaterCost('Variable'); setWaterReading('No Record') }
   }
 
   const handleTogglePayment = async (field) => {
@@ -603,7 +650,9 @@ function UnitDetail() {
               </div>
             ) : (
               <div className="space-y-2 text-sm text-gray-800">
-                <p><strong>Key No.:</strong> {unit.key_number || '-'}</p><p><strong>Meter No.:</strong> {unit.electric_meter_number || '-'}</p><p><strong>PTIN:</strong> {unit.ptin || '-'}</p>
+                <p><strong>Key No.:</strong> {unit.key_number || '-'}</p>
+                <p><strong>Meter No.:</strong> {unit.electric_meter_number || '-'}</p>
+                <p><strong>PTIN:</strong> {unit.ptin || '-'}</p>
               </div>
             )}
           </div>
@@ -629,6 +678,9 @@ function UnitDetail() {
                   <div className="flex justify-between border-b pb-1"><span className="text-gray-500 font-bold">Maintenance:</span> <span>₹{unit.maintenance_fee}</span></div>
                   <div className="flex justify-between border-b pb-1"><span className="text-gray-500 font-bold">Advance Amount:</span> <span>₹{unit.advance_amount}</span></div>
                   <div className="flex justify-between border-b pb-1 pt-2"><span className="text-blue-600 font-bold">Last Rent Paid Date:</span> <span className="text-blue-600 font-bold">{lastRentPaid}</span></div>
+                  
+                  {/* UPDATED: Water Reading explicitly pulled into the Unit Detail View! */}
+                  <div className="flex justify-between pt-2 border-b pb-1"><span className="text-gray-500 font-bold">Water Rdg (Selected Month):</span> <span className="text-gray-800 font-bold">{waterReading !== 'No Record' ? `${waterReading} u` : 'No Record'}</span></div>
                   <div className="flex justify-between pt-2"><span className="text-gray-500 font-bold">Water Bill (Selected Month):</span> <span className="text-blue-600 font-bold">{waterCost === 'Variable' ? 'Variable' : `₹${waterCost}`}</span></div>
                 </div>
               )}
@@ -670,12 +722,16 @@ function UnitDetail() {
 export default function App() {
   const [session, setSession] = useState(null)
   const [isAdmin, setIsAdmin] = useState(false) 
+  const [displayName, setDisplayName] = useState('') 
   const [authLoading, setAuthLoading] = useState(true)
 
   const checkProfile = async (userId) => {
     try {
-      const { data } = await supabase.from('profiles').select('is_admin').eq('id', userId).single();
-      if (data) setIsAdmin(data.is_admin);
+      const { data } = await supabase.from('profiles').select('is_admin, display_name').eq('id', userId).single();
+      if (data) {
+        setIsAdmin(data.is_admin);
+        setDisplayName(data.display_name);
+      }
     } catch (e) { console.error(e) }
     setAuthLoading(false);
   }
@@ -685,7 +741,7 @@ export default function App() {
       setSession(session); if (session) checkProfile(session.user.id); else setAuthLoading(false)
     })
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session); if (session) checkProfile(session.user.id); else { setIsAdmin(false); setAuthLoading(false) }
+      setSession(session); if (session) checkProfile(session.user.id); else { setIsAdmin(false); setDisplayName(''); setAuthLoading(false) }
     })
     return () => subscription.unsubscribe()
   }, [])
@@ -696,7 +752,7 @@ export default function App() {
     <Router>
       <Routes>
         <Route path="/login" element={session ? <Navigate to="/" replace /> : <LoginScreen />} />
-        <Route path="/" element={<ProtectedRoute session={session}><Dashboard isAdmin={isAdmin} /></ProtectedRoute>} />
+        <Route path="/" element={<ProtectedRoute session={session}><Dashboard isAdmin={isAdmin} displayName={displayName} /></ProtectedRoute>} />
         <Route path="/unit/:id" element={<ProtectedRoute session={session}><UnitDetail isAdmin={isAdmin} /></ProtectedRoute>} />
         <Route path="/water" element={<ProtectedRoute session={session}><WaterBilling isAdmin={isAdmin} /></ProtectedRoute>} />
       </Routes>
