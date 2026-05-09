@@ -88,7 +88,6 @@ function Dashboard({ isAdmin, displayName }) {
   const [lastRentChangeDate, setLastRentChangeDate] = useState('')
 
   const [currentWaterBills, setCurrentWaterBills] = useState({})
-  // NEW: State to hold current month payment status
   const [currentPayments, setCurrentPayments] = useState({})
 
   useEffect(() => { fetchData() }, [])
@@ -106,7 +105,6 @@ function Dashboard({ isAdmin, displayName }) {
 
       const currentMonth = new Date().toISOString().slice(0, 7)
       
-      // Fetch Water Bills
       const { data: waterData } = await supabase.from('unit_water_readings').select('unit_id, flat_bill_amount').eq('billing_month', currentMonth)
       if (waterData) {
         const billsMap = {}
@@ -114,7 +112,6 @@ function Dashboard({ isAdmin, displayName }) {
         setCurrentWaterBills(billsMap)
       }
 
-      // NEW: Fetch Payment Status for the current month!
       const { data: payData } = await supabase.from('payments').select('*').eq('payment_month', currentMonth)
       if (payData) {
         const payMap = {}
@@ -283,8 +280,6 @@ function Dashboard({ isAdmin, displayName }) {
                     {propertyFlats.map(unit => {
                       const alertStatus = unit.is_occupied ? getEscalationStatus(unit) : null;
                       const waterData = currentWaterBills[unit.id] || {};
-                      
-                      // Identify payment status, default to unpaid (false) if no record exists
                       const payment = currentPayments[unit.id] || { rent_paid: false, maintenance_paid: false, water_paid: false };
 
                       return (
@@ -302,7 +297,6 @@ function Dashboard({ isAdmin, displayName }) {
                               </div>
                             )}
 
-                            {/* UPDATED: Red (Unpaid) / Blue (Paid) Dashboard Finances! */}
                             <div className="space-y-3 my-6 bg-yvv-charcoalDark p-4 rounded border border-gray-800">
                               <div className="flex justify-between border-b border-gray-800 pb-2">
                                 <span className="text-gray-500 text-sm">Tenant</span>
@@ -456,7 +450,7 @@ function WaterBilling({ isAdmin }) {
 }
 
 // ==========================================
-// 3. FLAT PROFILE PAGE 
+// 3. FLAT PROFILE PAGE (NEW: Aadhar Uploads!)
 // ==========================================
 function UnitDetail() {
   const { id } = useParams()
@@ -470,9 +464,12 @@ function UnitDetail() {
   const [paymentMonth, setPaymentMonth] = useState(new Date().toISOString().slice(0, 7))
   const [payments, setPayments] = useState({ rent_paid: false, maintenance_paid: false, water_paid: false })
   const [waterCost, setWaterCost] = useState('Variable')
-  const [waterReading, setWaterReading] = useState('No Record') // NEW: Store the actual meter unit number
+  const [waterReading, setWaterReading] = useState('No Record') 
   const [tenantHistory, setTenantHistory] = useState([])
   const [lastRentPaid, setLastRentPaid] = useState('Checking...')
+  
+  // NEW: State for tracking document uploads
+  const [uploadingDoc, setUploadingDoc] = useState(false)
 
   useEffect(() => { 
     fetchUnit(); fetchTenantHistory(); fetchLastRentPaid() 
@@ -492,6 +489,50 @@ function UnitDetail() {
       })
     } catch (error) { console.error(error.message) } finally { setLoading(false) }
   }
+
+  // --- NEW: Aadhar Upload Functions ---
+  const handleAadharUpload = async (e) => {
+    try {
+      if (!e.target.files || e.target.files.length === 0) return;
+      setUploadingDoc(true);
+      const file = e.target.files[0];
+      const fileExt = file.name.split('.').pop();
+      // Auto-generate a random name so files don't overwrite each other
+      const fileName = `${unit.id}-${Date.now()}.${fileExt}`;
+
+      // 1. Upload to the secure vault
+      const { error: uploadError } = await supabase.storage.from('tenant_documents').upload(fileName, file);
+      if (uploadError) throw uploadError;
+
+      // 2. Save the filename to the database
+      await supabase.from('units').update({ aadhar_url: fileName }).eq('id', unit.id);
+      fetchUnit();
+      alert("✅ Document uploaded securely.");
+    } catch (error) {
+      alert("Upload failed: " + error.message);
+    } finally {
+      setUploadingDoc(false);
+    }
+  }
+
+  const viewDocument = async () => {
+    try {
+      // Create a secure link that expires in 60 seconds
+      const { data, error } = await supabase.storage.from('tenant_documents').createSignedUrl(unit.aadhar_url, 60);
+      if (error) throw error;
+      window.open(data.signedUrl, '_blank');
+    } catch (error) { alert(error.message); }
+  }
+
+  const removeDocument = async () => {
+    if (!window.confirm("Delete this document permanently?")) return;
+    try {
+      await supabase.storage.from('tenant_documents').remove([unit.aadhar_url]);
+      await supabase.from('units').update({ aadhar_url: null }).eq('id', unit.id);
+      fetchUnit();
+    } catch (error) { alert(error.message); }
+  }
+  // ------------------------------------
 
   const fetchLastRentPaid = async () => {
     try {
@@ -514,7 +555,7 @@ function UnitDetail() {
     try {
       const { error: historyError } = await supabase.from('tenant_history').insert([{ unit_id: id, tenant_name: unit.current_tenant_name, phone_number: unit.phone_number }])
       if (historyError) throw historyError
-      const { error: wipeError } = await supabase.from('units').update({ current_tenant_name: null, phone_number: null, advance_amount: 0, last_rent_change_date: null, is_occupied: false }).eq('id', id)
+      const { error: wipeError } = await supabase.from('units').update({ current_tenant_name: null, phone_number: null, advance_amount: 0, last_rent_change_date: null, is_occupied: false, aadhar_url: null }).eq('id', id)
       if (wipeError) throw wipeError
       alert("Tenant archived successfully. The unit is now vacant.")
       fetchUnit(); fetchTenantHistory()
@@ -555,7 +596,6 @@ function UnitDetail() {
 
   const fetchWaterBill = async () => {
     try {
-      // UPDATED: Now fetches 'current_reading' too!
       const { data } = await supabase.from('unit_water_readings').select('flat_bill_amount, current_reading').eq('unit_id', id).eq('billing_month', paymentMonth).single()
       if (data) {
         setWaterCost(Math.round(data.flat_bill_amount))
@@ -620,26 +660,61 @@ function UnitDetail() {
         </header>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-          <div className="col-span-1 md:col-span-2 bg-white p-6 rounded shadow-sm border border-gray-200">
-            <div className="flex justify-between items-center mb-4 border-b pb-2"><h2 className="text-lg font-bold text-gray-800">Tenant Details</h2>{!editMode.tenant && <button onClick={() => setEditMode({...editMode, tenant: true})} className="text-blue-600 text-sm hover:underline">✎ Edit</button>}</div>
-            {editMode.tenant ? (
-              <div className="space-y-3">
-                <div><label className="text-xs text-gray-500 font-bold mb-1 block">Tenant Name</label><input type="text" placeholder="Name" value={formData.tenantName} onChange={(e) => setFormData({...formData, tenantName: e.target.value})} className="w-full border rounded p-2 text-sm" /></div>
-                <div><label className="text-xs text-gray-500 font-bold mb-1 block">Phone Number</label><input type="text" placeholder="Phone" value={formData.phone} onChange={(e) => setFormData({...formData, phone: e.target.value})} className="w-full border rounded p-2 text-sm" /></div>
-                <div>
-                  <label className="text-xs text-blue-600 font-bold mb-1 block">Lease Start / Last Increase Date ✎</label>
-                  <input type="date" value={formData.lastRentChange} onChange={(e) => setFormData({...formData, lastRentChange: e.target.value})} className="w-full border border-blue-300 rounded p-2 text-sm outline-none focus:ring-2 focus:ring-blue-500" />
+          <div className="col-span-1 md:col-span-2 space-y-6">
+            {/* TENANT DETAILS CARD */}
+            <div className="bg-white p-6 rounded shadow-sm border border-gray-200">
+              <div className="flex justify-between items-center mb-4 border-b pb-2"><h2 className="text-lg font-bold text-gray-800">Tenant Details</h2>{!editMode.tenant && <button onClick={() => setEditMode({...editMode, tenant: true})} className="text-blue-600 text-sm hover:underline">✎ Edit</button>}</div>
+              {editMode.tenant ? (
+                <div className="space-y-3">
+                  <div><label className="text-xs text-gray-500 font-bold mb-1 block">Tenant Name</label><input type="text" placeholder="Name" value={formData.tenantName} onChange={(e) => setFormData({...formData, tenantName: e.target.value})} className="w-full border rounded p-2 text-sm" /></div>
+                  <div><label className="text-xs text-gray-500 font-bold mb-1 block">Phone Number</label><input type="text" placeholder="Phone" value={formData.phone} onChange={(e) => setFormData({...formData, phone: e.target.value})} className="w-full border rounded p-2 text-sm" /></div>
+                  <div>
+                    <label className="text-xs text-blue-600 font-bold mb-1 block">Lease Start / Last Increase Date ✎</label>
+                    <input type="date" value={formData.lastRentChange} onChange={(e) => setFormData({...formData, lastRentChange: e.target.value})} className="w-full border border-blue-300 rounded p-2 text-sm outline-none focus:ring-2 focus:ring-blue-500" />
+                  </div>
+                  <div className="flex gap-2 pt-2"><button onClick={() => handleSave('tenant')} className="px-4 py-2 bg-blue-600 text-white text-sm rounded font-bold">Save</button><button onClick={() => setEditMode({...editMode, tenant: false})} className="text-sm text-gray-500">Cancel</button></div>
                 </div>
-                <div className="flex gap-2 pt-2"><button onClick={() => handleSave('tenant')} className="px-4 py-2 bg-blue-600 text-white text-sm rounded font-bold">Save</button><button onClick={() => setEditMode({...editMode, tenant: false})} className="text-sm text-gray-500">Cancel</button></div>
-              </div>
-            ) : (
-              <div className="flex justify-between items-center">
-                <div className="space-y-1"><p className="text-lg font-bold text-gray-900">{unit.current_tenant_name || 'No active tenant'}</p><p className="text-sm text-gray-600">Phone: {unit.phone_number || 'N/A'}</p></div>
-                {unit.is_occupied && <button onClick={handleArchiveTenant} className="px-4 py-2 bg-gray-100 border border-gray-300 rounded text-sm font-bold text-gray-700 hover:bg-red-50 hover:text-red-600 hover:border-red-300 transition-colors">Archive & Change Tenant</button>}
-              </div>
-            )}
+              ) : (
+                <div className="flex justify-between items-center">
+                  <div className="space-y-1"><p className="text-lg font-bold text-gray-900">{unit.current_tenant_name || 'No active tenant'}</p><p className="text-sm text-gray-600">Phone: {unit.phone_number || 'N/A'}</p></div>
+                  {unit.is_occupied && <button onClick={handleArchiveTenant} className="px-4 py-2 bg-gray-100 border border-gray-300 rounded text-sm font-bold text-gray-700 hover:bg-red-50 hover:text-red-600 hover:border-red-300 transition-colors">Archive & Change Tenant</button>}
+                </div>
+              )}
+            </div>
+
+            {/* NEW: IDENTITY DOCUMENT CARD */}
+            <div className="bg-white p-6 rounded shadow-sm border border-gray-200">
+              <h2 className="text-lg font-bold text-gray-800 mb-4 border-b pb-2">📄 Identity Document (Aadhar / ID)</h2>
+              
+              {!unit.is_occupied ? (
+                 <p className="text-sm text-gray-500 italic">Assign a tenant first to upload documents.</p>
+              ) : unit.aadhar_url ? (
+                <div className="flex items-center justify-between bg-blue-50 p-4 rounded border border-blue-100">
+                  <div className="flex items-center gap-3">
+                    <span className="text-2xl">📑</span>
+                    <div>
+                      <p className="text-sm font-bold text-blue-900">Document Uploaded</p>
+                      <p className="text-xs text-blue-600">Securely stored in vault.</p>
+                    </div>
+                  </div>
+                  <div className="flex gap-3">
+                    <button onClick={viewDocument} className="text-sm font-bold text-blue-600 hover:underline">View</button>
+                    <button onClick={removeDocument} className="text-sm font-bold text-red-500 hover:underline">Delete</button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex flex-col items-start gap-2">
+                  <p className="text-sm text-gray-600">No document on file. (Optional)</p>
+                  <label className={`cursor-pointer px-4 py-2 bg-gray-100 border border-gray-300 text-gray-700 text-sm font-bold rounded hover:bg-gray-200 transition-colors ${uploadingDoc ? 'opacity-50 pointer-events-none' : ''}`}>
+                    {uploadingDoc ? 'Uploading securely...' : '⬆️ Upload Document (Image/PDF)'}
+                    <input type="file" className="hidden" accept="image/*,application/pdf" onChange={handleAadharUpload} disabled={uploadingDoc} />
+                  </label>
+                </div>
+              )}
+            </div>
           </div>
-          <div className="col-span-1 bg-white p-6 rounded shadow-sm border border-gray-200">
+
+          <div className="col-span-1 bg-white p-6 rounded shadow-sm border border-gray-200 h-fit">
             <div className="flex justify-between items-center mb-4 border-b pb-2"><h2 className="text-lg font-bold text-gray-800">Technical Info</h2>{!editMode.tech && <button onClick={() => setEditMode({...editMode, tech: true})} className="text-blue-600 text-sm hover:underline">✎ Edit</button>}</div>
             {editMode.tech ? (
               <div className="space-y-3">
@@ -679,7 +754,6 @@ function UnitDetail() {
                   <div className="flex justify-between border-b pb-1"><span className="text-gray-500 font-bold">Advance Amount:</span> <span>₹{unit.advance_amount}</span></div>
                   <div className="flex justify-between border-b pb-1 pt-2"><span className="text-blue-600 font-bold">Last Rent Paid Date:</span> <span className="text-blue-600 font-bold">{lastRentPaid}</span></div>
                   
-                  {/* UPDATED: Water Reading explicitly pulled into the Unit Detail View! */}
                   <div className="flex justify-between pt-2 border-b pb-1"><span className="text-gray-500 font-bold">Water Rdg (Selected Month):</span> <span className="text-gray-800 font-bold">{waterReading !== 'No Record' ? `${waterReading} u` : 'No Record'}</span></div>
                   <div className="flex justify-between pt-2"><span className="text-gray-500 font-bold">Water Bill (Selected Month):</span> <span className="text-blue-600 font-bold">{waterCost === 'Variable' ? 'Variable' : `₹${waterCost}`}</span></div>
                 </div>
