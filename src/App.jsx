@@ -181,8 +181,10 @@ function Dashboard({ isAdmin, displayName }) {
   const showWaterButton = isAdmin || properties.some(p => p.requires_water_billing);
 
   return (
-    <div className="min-h-screen bg-yvv-charcoalDark text-gray-200 p-8 font-sans">
-      <header className="mb-8 border-b border-yvv-charcoal pb-4 flex justify-between items-end">
+    <div className="min-h-screen bg-yvv-charcoalDark text-gray-200 p-4 md:p-8 font-sans">
+      {/* TWEAK 1: Dynamic p-4 to p-8 for mobile vs desktop padding */}
+      {/* TWEAK 2: Header uses flex-col on mobile and flex-row on desktop so buttons don't collide */}
+      <header className="mb-8 border-b border-yvv-charcoal pb-4 flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
         <div>
           <h1 className="text-3xl font-bold text-yvv-cyan tracking-widest flex items-center gap-2">
             Welcome, {displayName || 'User'} 
@@ -190,9 +192,9 @@ function Dashboard({ isAdmin, displayName }) {
           </h1>
           <p className="text-sm text-gray-400 mt-1">Tenant Management Portal</p>
         </div>
-        <div className="flex gap-4 items-center">
+        <div className="flex gap-4 items-center w-full md:w-auto">
           {showWaterButton && (
-            <Link to="/water" className="px-6 py-2 bg-yvv-cyan text-yvv-charcoalDark font-bold rounded shadow-[0_0_15px_rgba(34,211,238,0.3)] hover:brightness-110 transition-all">💧 Water Billing</Link>
+            <Link to="/water" className="flex-1 md:flex-none text-center px-6 py-2 bg-yvv-cyan text-yvv-charcoalDark font-bold rounded shadow-[0_0_15px_rgba(34,211,238,0.3)] hover:brightness-110 transition-all">💧 Water Billing</Link>
           )}
           <button onClick={handleSignOut} className="px-4 py-2 border border-gray-700 text-gray-400 font-bold rounded hover:bg-red-900/30 hover:text-red-400 hover:border-red-800 transition-all">Exit 🔒</button>
         </div>
@@ -201,7 +203,7 @@ function Dashboard({ isAdmin, displayName }) {
       {escalationAlerts.length > 0 && (
         <div className="mb-8 bg-yellow-900/30 border border-yellow-600 p-4 rounded-lg flex items-center justify-between shadow-[0_0_15px_rgba(202,138,4,0.1)]">
           <div className="flex items-center gap-3"><span className="text-2xl">⚠️</span><div><h3 className="text-yellow-500 font-bold">Lease Renewals Due</h3><p className="text-sm text-yellow-200/70">You have {escalationAlerts.length} unit(s) with leases expiring in the next 30 days or already overdue.</p></div></div>
-          <button onClick={() => setFilter('alerts')} className="px-4 py-2 bg-yellow-600 text-yellow-50 font-bold text-sm rounded hover:bg-yellow-500 transition-colors">View Alerts</button>
+          <button onClick={() => setFilter('alerts')} className="px-4 py-2 bg-yellow-600 text-yellow-50 font-bold text-sm rounded hover:bg-yellow-500 transition-colors whitespace-nowrap ml-2">View Alerts</button>
         </div>
       )}
 
@@ -218,21 +220,21 @@ function Dashboard({ isAdmin, displayName }) {
           <summary className="text-white font-bold list-none flex justify-between items-center outline-none"><span>+ Add New Unit (Admin Only)</span><span className="text-yvv-cyan group-open:rotate-45 transition-transform duration-300">✕</span></summary>
           <div className="mt-4 pt-4 border-t border-gray-800 cursor-default">
             <form onSubmit={handleAddUnit} className="flex flex-wrap gap-4 items-end">
-              <div className="flex-1 min-w-[200px]">
+              <div className="flex-1 min-w-[100%] md:min-w-[200px]">
                 <label className="block text-xs text-yvv-cyan uppercase mb-2">Building</label>
                 <select value={selectedPropertyId} onChange={(e) => setSelectedPropertyId(e.target.value)} className="w-full bg-yvv-charcoalDark border border-gray-700 rounded p-2 text-white outline-none focus:border-yvv-cyan cursor-pointer">
                   {properties.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                 </select>
               </div>
-              <div className="flex-1 min-w-[150px]"><label className="block text-xs text-yvv-cyan uppercase mb-2">Unit Number</label><input type="text" placeholder="Flat 105" value={newUnitNumber} onChange={(e) => setNewUnitNumber(e.target.value)} className="w-full bg-yvv-charcoalDark border border-gray-700 rounded p-2 text-white outline-none focus:border-yvv-cyan" /></div>
-              <div className="flex-1 min-w-[150px]"><label className="block text-xs text-yvv-cyan uppercase mb-2">Base Rent (₹)</label><input type="number" placeholder="15000" value={newBaseRent} onChange={(e) => setNewBaseRent(e.target.value)} className="w-full bg-yvv-charcoalDark border border-gray-700 rounded p-2 text-white outline-none focus:border-yvv-cyan" /></div>
-              <button type="submit" className="px-6 py-2 bg-yvv-charcoalDark border border-yvv-cyan text-yvv-cyan rounded font-semibold h-[42px]">+ Add</button>
+              <div className="flex-1 min-w-[100%] md:min-w-[150px]"><label className="block text-xs text-yvv-cyan uppercase mb-2">Unit Number</label><input type="text" placeholder="Flat 105" value={newUnitNumber} onChange={(e) => setNewUnitNumber(e.target.value)} className="w-full bg-yvv-charcoalDark border border-gray-700 rounded p-2 text-white outline-none focus:border-yvv-cyan" /></div>
+              <div className="flex-1 min-w-[100%] md:min-w-[150px]"><label className="block text-xs text-yvv-cyan uppercase mb-2">Base Rent (₹)</label><input type="number" placeholder="15000" value={newBaseRent} onChange={(e) => setNewBaseRent(e.target.value)} className="w-full bg-yvv-charcoalDark border border-gray-700 rounded p-2 text-white outline-none focus:border-yvv-cyan" /></div>
+              <button type="submit" className="w-full md:w-auto px-6 py-2 bg-yvv-charcoalDark border border-yvv-cyan text-yvv-cyan rounded font-semibold h-[42px]">+ Add</button>
             </form>
           </div>
         </details>
       )}
 
-      <div className="flex gap-2 mb-6 border-b border-gray-800 pb-4">
+      <div className="flex flex-wrap gap-2 mb-6 border-b border-gray-800 pb-4">
         <button onClick={() => setFilter('all')} className={`px-4 py-2 rounded-full text-sm font-semibold transition-all ${filter === 'all' ? 'bg-yvv-cyan text-yvv-charcoalDark' : 'bg-yvv-charcoal text-gray-400'}`}>All Flats</button>
         <button onClick={() => setFilter('occupied')} className={`px-4 py-2 rounded-full text-sm font-semibold transition-all ${filter === 'occupied' ? 'bg-green-500 text-white' : 'bg-yvv-charcoal text-gray-400'}`}>Occupied</button>
         <button onClick={() => setFilter('vacant')} className={`px-4 py-2 rounded-full text-sm font-semibold transition-all ${filter === 'vacant' ? 'bg-red-500 text-white' : 'bg-yvv-charcoal text-gray-400'}`}>Vacant</button>
@@ -394,20 +396,21 @@ function WaterBilling({ isAdmin }) {
   if (authError) return <div className="min-h-screen bg-yvv-charcoalDark flex flex-col items-center justify-center text-red-500 p-4"><h1 className="text-2xl font-bold mb-4">Access Denied</h1><p>Your property is not configured for water billing.</p><button onClick={() => navigate('/')} className="mt-6 px-4 py-2 bg-yvv-charcoal border border-red-500 rounded text-white">Return to Dashboard</button></div>
 
   return (
-    <div className="min-h-screen bg-yvv-charcoalDark text-gray-200 p-8 font-sans pb-24">
+    <div className="min-h-screen bg-yvv-charcoalDark text-gray-200 p-4 md:p-8 font-sans pb-24">
+      {/* TWEAK 1: Dynamic p-4 to p-8 for mobile vs desktop padding */}
       <div className="max-w-6xl mx-auto">
         <button onClick={() => navigate('/')} className="text-gray-400 hover:text-yvv-cyan transition-colors mb-6 flex items-center gap-2 font-semibold"><span>←</span> Back to Dashboard</button>
-        <h1 className="text-3xl font-bold text-white mb-8 border-b border-gray-700 pb-4">WATER READING & BILLING</h1>
+        <h1 className="text-2xl md:text-3xl font-bold text-white mb-8 border-b border-gray-700 pb-4">WATER READING & BILLING</h1>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          <div className="col-span-1 bg-yvv-charcoal p-6 rounded-xl border border-gray-800 shadow-lg h-fit sticky top-8">
+          <div className="col-span-1 bg-yvv-charcoal p-6 rounded-xl border border-gray-800 shadow-lg h-fit lg:sticky top-8">
             <h2 className="text-xs text-gray-400 uppercase tracking-widest border-b border-gray-700 pb-2 mb-4 font-bold">Overview</h2>
             <div className="space-y-6">
               <div className="grid grid-cols-2 gap-4">
-                <div className="bg-yvv-charcoalDark p-4 rounded border border-gray-700"><p className="text-xs text-gray-400 uppercase">Total Cost:</p><p className="text-2xl text-red-400 font-bold">₹{totalExpense.toLocaleString('en-IN')}</p></div>
-                <div className="bg-yvv-charcoalDark p-4 rounded border border-gray-700"><p className="text-xs text-gray-400 uppercase">Unit Cost (C):</p><p className="text-2xl text-yvv-cyan font-bold">₹{costPerUnit.toFixed(2)}<span className="text-sm text-gray-500 font-normal">/u</span></p></div>
+                <div className="bg-yvv-charcoalDark p-4 rounded border border-gray-700"><p className="text-xs text-gray-400 uppercase">Total Cost:</p><p className="text-xl md:text-2xl text-red-400 font-bold">₹{totalExpense.toLocaleString('en-IN')}</p></div>
+                <div className="bg-yvv-charcoalDark p-4 rounded border border-gray-700"><p className="text-xs text-gray-400 uppercase">Unit Cost (C):</p><p className="text-xl md:text-2xl text-yvv-cyan font-bold">₹{costPerUnit.toFixed(2)}<span className="text-sm text-gray-500 font-normal">/u</span></p></div>
               </div>
               <div className="grid grid-cols-2 gap-4 border-t border-gray-700 pt-6">
-                <div><p className="text-xs text-gray-400 uppercase">Total Consumed:</p><p className="text-2xl text-white font-bold">{totalConsumption} u</p></div>
+                <div><p className="text-xs text-gray-400 uppercase">Total Consumed:</p><p className="text-xl md:text-2xl text-white font-bold">{totalConsumption} u</p></div>
                 <div><p className="text-xs text-gray-400 uppercase">Month:</p><input type="month" value={billingMonth} onChange={(e) => setBillingMonth(e.target.value)} className="bg-transparent text-white font-bold outline-none border-b border-yvv-cyan w-full mt-1" /></div>
               </div>
             </div>
@@ -423,7 +426,7 @@ function WaterBilling({ isAdmin }) {
             </div>
             <div className="bg-yvv-charcoal rounded-xl border border-gray-800 overflow-hidden shadow-lg">
               <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse">
+                <table className="w-full text-left border-collapse min-w-[400px]">
                   <thead><tr className="bg-gray-800/50 border-b border-gray-700 text-xs text-gray-400 uppercase tracking-wider"><th className="p-4">Unit</th><th className="p-4">Prev</th><th className="p-4">Curr</th><th className="p-4 bg-gray-800">Bill</th></tr></thead>
                   <tbody>
                     {units.map((unit) => {
@@ -431,8 +434,8 @@ function WaterBilling({ isAdmin }) {
                       return (
                         <tr key={unit.id} className="border-b border-gray-800">
                           <td className="p-4 text-white font-bold">{unit.unit_number}</td>
-                          <td className="p-4"><input type="number" value={prev===0?'':prev} onChange={(e) => handleReadingChange(unit.id, 'previous', e.target.value)} className="w-20 bg-transparent border-b border-gray-700 text-white outline-none" /></td>
-                          <td className="p-4"><input type="number" value={curr===0?'':curr} onChange={(e) => handleReadingChange(unit.id, 'current', e.target.value)} className="w-20 bg-yvv-charcoalDark border border-gray-600 rounded p-1 text-white outline-none" /></td>
+                          <td className="p-4"><input type="number" value={prev===0?'':prev} onChange={(e) => handleReadingChange(unit.id, 'previous', e.target.value)} className="w-16 md:w-20 bg-transparent border-b border-gray-700 text-white outline-none" /></td>
+                          <td className="p-4"><input type="number" value={curr===0?'':curr} onChange={(e) => handleReadingChange(unit.id, 'current', e.target.value)} className="w-16 md:w-20 bg-yvv-charcoalDark border border-gray-600 rounded p-1 text-white outline-none" /></td>
                           <td className="p-4 font-bold text-yvv-cyan bg-gray-800/20">₹{Math.round(bill)}</td>
                         </tr>
                       )
@@ -441,7 +444,7 @@ function WaterBilling({ isAdmin }) {
                 </table>
               </div>
             </div>
-            <div className="flex justify-end pt-4"><button onClick={handleSaveToDatabase} className="px-8 py-3 bg-green-500 text-white font-bold rounded-lg hover:bg-green-400">Save All Readings</button></div>
+            <div className="flex justify-end pt-4"><button onClick={handleSaveToDatabase} className="w-full md:w-auto px-8 py-3 bg-green-500 text-white font-bold rounded-lg hover:bg-green-400">Save All Readings</button></div>
           </div>
         </div>
       </div>
@@ -450,7 +453,7 @@ function WaterBilling({ isAdmin }) {
 }
 
 // ==========================================
-// 3. FLAT PROFILE PAGE (NEW: Aadhar Uploads!)
+// 3. FLAT PROFILE PAGE 
 // ==========================================
 function UnitDetail() {
   const { id } = useParams()
@@ -467,8 +470,6 @@ function UnitDetail() {
   const [waterReading, setWaterReading] = useState('No Record') 
   const [tenantHistory, setTenantHistory] = useState([])
   const [lastRentPaid, setLastRentPaid] = useState('Checking...')
-  
-  // NEW: State for tracking document uploads
   const [uploadingDoc, setUploadingDoc] = useState(false)
 
   useEffect(() => { 
@@ -490,21 +491,17 @@ function UnitDetail() {
     } catch (error) { console.error(error.message) } finally { setLoading(false) }
   }
 
-  // --- NEW: Aadhar Upload Functions ---
   const handleAadharUpload = async (e) => {
     try {
       if (!e.target.files || e.target.files.length === 0) return;
       setUploadingDoc(true);
       const file = e.target.files[0];
       const fileExt = file.name.split('.').pop();
-      // Auto-generate a random name so files don't overwrite each other
       const fileName = `${unit.id}-${Date.now()}.${fileExt}`;
 
-      // 1. Upload to the secure vault
       const { error: uploadError } = await supabase.storage.from('tenant_documents').upload(fileName, file);
       if (uploadError) throw uploadError;
 
-      // 2. Save the filename to the database
       await supabase.from('units').update({ aadhar_url: fileName }).eq('id', unit.id);
       fetchUnit();
       alert("✅ Document uploaded securely.");
@@ -517,7 +514,6 @@ function UnitDetail() {
 
   const viewDocument = async () => {
     try {
-      // Create a secure link that expires in 60 seconds
       const { data, error } = await supabase.storage.from('tenant_documents').createSignedUrl(unit.aadhar_url, 60);
       if (error) throw error;
       window.open(data.signedUrl, '_blank');
@@ -532,7 +528,6 @@ function UnitDetail() {
       fetchUnit();
     } catch (error) { alert(error.message); }
   }
-  // ------------------------------------
 
   const fetchLastRentPaid = async () => {
     try {
@@ -633,27 +628,29 @@ function UnitDetail() {
   const alertStatus = getEscalationStatus(unit);
 
   return (
-    <div className="min-h-screen bg-[#e5e7eb] text-gray-900 p-8 font-sans pb-24">
+    <div className="min-h-screen bg-[#e5e7eb] text-gray-900 p-4 md:p-8 font-sans pb-24">
+      {/* TWEAK 1: Dynamic p-4 to p-8 for mobile vs desktop padding */}
       <div className="max-w-5xl mx-auto">
         <button onClick={() => navigate('/')} className="text-gray-600 hover:text-black transition-colors mb-6 flex items-center gap-2 font-bold"><span>←</span> Back to Dashboard</button>
 
         {alertStatus && (
-          <div className="mb-6 bg-yellow-100 border-l-4 border-yellow-500 p-4 rounded shadow-sm flex justify-between items-center">
+          <div className="mb-6 bg-yellow-100 border-l-4 border-yellow-500 p-4 rounded shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
             <div>
               <h3 className="text-yellow-800 font-bold text-lg">⚠️ Action Required: Lease Renewal</h3>
               <p className="text-sm text-yellow-700 mt-1">This tenant's lease {alertStatus.status === 'overdue' ? `expired ${alertStatus.days} days ago.` : `expires in ${alertStatus.days} days.`}</p>
               <p className="text-xs font-bold text-yellow-800 mt-1">Calculated Expiration: {alertStatus.expireDateStr}</p>
             </div>
-            <button onClick={handleRenewLease} className="px-6 py-3 bg-yellow-500 text-white font-bold rounded shadow hover:bg-yellow-600 transition-colors">🚀 Auto-Renew Lease</button>
+            <button onClick={handleRenewLease} className="w-full md:w-auto px-6 py-3 bg-yellow-500 text-white font-bold rounded shadow hover:bg-yellow-600 transition-colors">🚀 Auto-Renew Lease</button>
           </div>
         )}
 
-        <header className="mb-6 bg-white p-6 rounded shadow-sm border-t-4 border-gray-400 flex justify-between items-start">
-          <div className="flex gap-6 items-center">
-             <div className="w-24 h-24 bg-gray-200 rounded flex items-center justify-center text-gray-400 text-2xl">🏢</div>
+        {/* TWEAK 2: Header uses flex-col on mobile and flex-row on desktop */}
+        <header className="mb-6 bg-white p-4 md:p-6 rounded shadow-sm border-t-4 border-gray-400 flex flex-col md:flex-row justify-between items-start gap-4">
+          <div className="flex gap-4 md:gap-6 items-center">
+             <div className="w-16 h-16 md:w-24 md:h-24 bg-gray-200 rounded flex items-center justify-center text-gray-400 text-2xl">🏢</div>
              <div>
                <p className="text-xs text-gray-500 uppercase font-bold tracking-widest">{unit.properties?.name}</p>
-               <h1 className="text-4xl font-bold text-gray-900 mb-1">FLAT {unit.unit_number}</h1>
+               <h1 className="text-3xl md:text-4xl font-bold text-gray-900 mb-1">FLAT {unit.unit_number}</h1>
                <div className={`inline-block px-3 py-1 rounded text-xs font-bold ${unit.is_occupied ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>{unit.is_occupied ? 'OCCUPIED' : 'VACANT'}</div>
              </div>
           </div>
@@ -661,7 +658,6 @@ function UnitDetail() {
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
           <div className="col-span-1 md:col-span-2 space-y-6">
-            {/* TENANT DETAILS CARD */}
             <div className="bg-white p-6 rounded shadow-sm border border-gray-200">
               <div className="flex justify-between items-center mb-4 border-b pb-2"><h2 className="text-lg font-bold text-gray-800">Tenant Details</h2>{!editMode.tenant && <button onClick={() => setEditMode({...editMode, tenant: true})} className="text-blue-600 text-sm hover:underline">✎ Edit</button>}</div>
               {editMode.tenant ? (
@@ -675,21 +671,20 @@ function UnitDetail() {
                   <div className="flex gap-2 pt-2"><button onClick={() => handleSave('tenant')} className="px-4 py-2 bg-blue-600 text-white text-sm rounded font-bold">Save</button><button onClick={() => setEditMode({...editMode, tenant: false})} className="text-sm text-gray-500">Cancel</button></div>
                 </div>
               ) : (
-                <div className="flex justify-between items-center">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                   <div className="space-y-1"><p className="text-lg font-bold text-gray-900">{unit.current_tenant_name || 'No active tenant'}</p><p className="text-sm text-gray-600">Phone: {unit.phone_number || 'N/A'}</p></div>
-                  {unit.is_occupied && <button onClick={handleArchiveTenant} className="px-4 py-2 bg-gray-100 border border-gray-300 rounded text-sm font-bold text-gray-700 hover:bg-red-50 hover:text-red-600 hover:border-red-300 transition-colors">Archive & Change Tenant</button>}
+                  {unit.is_occupied && <button onClick={handleArchiveTenant} className="w-full sm:w-auto px-4 py-2 bg-gray-100 border border-gray-300 rounded text-sm font-bold text-gray-700 hover:bg-red-50 hover:text-red-600 hover:border-red-300 transition-colors">Archive & Change Tenant</button>}
                 </div>
               )}
             </div>
 
-            {/* NEW: IDENTITY DOCUMENT CARD */}
             <div className="bg-white p-6 rounded shadow-sm border border-gray-200">
               <h2 className="text-lg font-bold text-gray-800 mb-4 border-b pb-2">📄 Identity Document (Aadhar / ID)</h2>
               
               {!unit.is_occupied ? (
                  <p className="text-sm text-gray-500 italic">Assign a tenant first to upload documents.</p>
               ) : unit.aadhar_url ? (
-                <div className="flex items-center justify-between bg-blue-50 p-4 rounded border border-blue-100">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between bg-blue-50 p-4 rounded border border-blue-100 gap-4">
                   <div className="flex items-center gap-3">
                     <span className="text-2xl">📑</span>
                     <div>
@@ -697,16 +692,16 @@ function UnitDetail() {
                       <p className="text-xs text-blue-600">Securely stored in vault.</p>
                     </div>
                   </div>
-                  <div className="flex gap-3">
-                    <button onClick={viewDocument} className="text-sm font-bold text-blue-600 hover:underline">View</button>
-                    <button onClick={removeDocument} className="text-sm font-bold text-red-500 hover:underline">Delete</button>
+                  <div className="flex gap-3 w-full sm:w-auto">
+                    <button onClick={viewDocument} className="flex-1 sm:flex-none text-center bg-blue-100 px-3 py-1 rounded text-sm font-bold text-blue-700 hover:bg-blue-200">View</button>
+                    <button onClick={removeDocument} className="flex-1 sm:flex-none text-center bg-red-100 px-3 py-1 rounded text-sm font-bold text-red-600 hover:bg-red-200">Delete</button>
                   </div>
                 </div>
               ) : (
                 <div className="flex flex-col items-start gap-2">
                   <p className="text-sm text-gray-600">No document on file. (Optional)</p>
-                  <label className={`cursor-pointer px-4 py-2 bg-gray-100 border border-gray-300 text-gray-700 text-sm font-bold rounded hover:bg-gray-200 transition-colors ${uploadingDoc ? 'opacity-50 pointer-events-none' : ''}`}>
-                    {uploadingDoc ? 'Uploading securely...' : '⬆️ Upload Document (Image/PDF)'}
+                  <label className={`w-full sm:w-auto text-center cursor-pointer px-4 py-2 bg-gray-100 border border-gray-300 text-gray-700 text-sm font-bold rounded hover:bg-gray-200 transition-colors ${uploadingDoc ? 'opacity-50 pointer-events-none' : ''}`}>
+                    {uploadingDoc ? 'Uploading securely...' : '⬆️ Upload Document'}
                     <input type="file" className="hidden" accept="image/*,application/pdf" onChange={handleAadharUpload} disabled={uploadingDoc} />
                   </label>
                 </div>
@@ -724,10 +719,10 @@ function UnitDetail() {
                 <div className="flex gap-2"><button onClick={() => handleSave('tech')} className="px-4 py-2 bg-blue-600 text-white text-sm rounded font-bold">Save</button><button onClick={() => setEditMode({...editMode, tech: false})} className="text-sm text-gray-500">Cancel</button></div>
               </div>
             ) : (
-              <div className="space-y-2 text-sm text-gray-800">
-                <p><strong>Key No.:</strong> {unit.key_number || '-'}</p>
-                <p><strong>Meter No.:</strong> {unit.electric_meter_number || '-'}</p>
-                <p><strong>PTIN:</strong> {unit.ptin || '-'}</p>
+              <div className="space-y-2 text-sm text-gray-800 overflow-hidden">
+                <p className="truncate"><strong>Key No.:</strong> {unit.key_number || '-'}</p>
+                <p className="truncate"><strong>Meter No.:</strong> {unit.electric_meter_number || '-'}</p>
+                <p className="truncate"><strong>PTIN:</strong> {unit.ptin || '-'}</p>
               </div>
             )}
           </div>
@@ -735,7 +730,8 @@ function UnitDetail() {
 
         <div className="bg-white p-6 rounded shadow-sm border border-gray-200 mb-6">
           <div className="flex justify-between items-center mb-4 border-b pb-2"><h2 className="text-lg font-bold text-gray-800">Financials & Current Month Ledger</h2>{!editMode.financial && <button onClick={() => setEditMode({...editMode, financial: true})} className="text-blue-600 text-sm hover:underline">✎ Edit Financials</button>}</div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          {/* TWEAK 3: Grid uses lg:grid-cols-2 to stack beautifully on iPads and phones */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8">
             <div>
               {editMode.financial ? (
                 <div className="space-y-3 bg-gray-50 p-4 rounded border">
@@ -760,11 +756,11 @@ function UnitDetail() {
               )}
             </div>
             <div>
-               <div className="flex justify-between items-center mb-2"><p className="text-xs font-bold text-gray-500 uppercase">Payment Status For:</p><input type="month" value={paymentMonth} onChange={(e) => setPaymentMonth(e.target.value)} className="border rounded p-1 text-xs font-bold outline-none" /></div>
+               <div className="flex justify-between items-center mb-2"><p className="text-xs font-bold text-gray-500 uppercase">Payment Status For:</p><input type="month" value={paymentMonth} onChange={(e) => setPaymentMonth(e.target.value)} className="border rounded p-1 text-xs font-bold outline-none bg-gray-50" /></div>
                <div className="border rounded divide-y">
-                 <label className={`flex items-center p-3 cursor-pointer transition-colors ${payments.rent_paid ? 'bg-green-50' : 'hover:bg-gray-50'}`}><input type="checkbox" checked={payments.rent_paid} onChange={() => handleTogglePayment('rent_paid')} className="w-4 h-4 mr-3 accent-green-600" /><span className={`text-sm font-bold ${payments.rent_paid ? 'text-green-800' : 'text-gray-700'}`}>Rent Paid</span></label>
-                 <label className={`flex items-center p-3 cursor-pointer transition-colors ${payments.maintenance_paid ? 'bg-green-50' : 'hover:bg-gray-50'}`}><input type="checkbox" checked={payments.maintenance_paid} onChange={() => handleTogglePayment('maintenance_paid')} className="w-4 h-4 mr-3 accent-green-600" /><span className={`text-sm font-bold ${payments.maintenance_paid ? 'text-green-800' : 'text-gray-700'}`}>Maintenance Paid</span></label>
-                 <label className={`flex items-center p-3 cursor-pointer transition-colors ${payments.water_paid ? 'bg-green-50' : 'hover:bg-gray-50'}`}><input type="checkbox" checked={payments.water_paid} onChange={() => handleTogglePayment('water_paid')} className="w-4 h-4 mr-3 accent-green-600" /><span className={`text-sm font-bold ${payments.water_paid ? 'text-green-800' : 'text-gray-700'}`}>Water Bill Paid</span></label>
+                 <label className={`flex items-center p-3 sm:p-4 cursor-pointer transition-colors ${payments.rent_paid ? 'bg-green-50' : 'hover:bg-gray-50'}`}><input type="checkbox" checked={payments.rent_paid} onChange={() => handleTogglePayment('rent_paid')} className="w-5 h-5 mr-3 accent-green-600" /><span className={`text-sm sm:text-base font-bold ${payments.rent_paid ? 'text-green-800' : 'text-gray-700'}`}>Rent Paid</span></label>
+                 <label className={`flex items-center p-3 sm:p-4 cursor-pointer transition-colors ${payments.maintenance_paid ? 'bg-green-50' : 'hover:bg-gray-50'}`}><input type="checkbox" checked={payments.maintenance_paid} onChange={() => handleTogglePayment('maintenance_paid')} className="w-5 h-5 mr-3 accent-green-600" /><span className={`text-sm sm:text-base font-bold ${payments.maintenance_paid ? 'text-green-800' : 'text-gray-700'}`}>Maintenance Paid</span></label>
+                 <label className={`flex items-center p-3 sm:p-4 cursor-pointer transition-colors ${payments.water_paid ? 'bg-green-50' : 'hover:bg-gray-50'}`}><input type="checkbox" checked={payments.water_paid} onChange={() => handleTogglePayment('water_paid')} className="w-5 h-5 mr-3 accent-green-600" /><span className={`text-sm sm:text-base font-bold ${payments.water_paid ? 'text-green-800' : 'text-gray-700'}`}>Water Bill Paid</span></label>
                </div>
             </div>
           </div>
@@ -776,9 +772,9 @@ function UnitDetail() {
             {tenantHistory.length === 0 ? <p className="text-sm text-gray-500 italic text-center py-4">No past tenants recorded for this unit.</p> : (
               <div className="space-y-3">
                 {tenantHistory.map((history) => (
-                  <div key={history.id} className="flex justify-between items-center p-3 bg-gray-50 rounded border border-gray-100 text-sm">
+                  <div key={history.id} className="flex flex-col sm:flex-row justify-between items-start sm:items-center p-3 bg-gray-50 rounded border border-gray-100 text-sm gap-2">
                     <div><p className="font-bold text-gray-800">{history.tenant_name}</p><p className="text-xs text-gray-500">📞 {history.phone_number || 'No phone recorded'}</p></div>
-                    <div className="text-right"><p className="text-xs text-gray-400 uppercase tracking-wider mb-1">Moved Out</p><p className="font-bold text-gray-700">{new Date(history.move_out_date).toLocaleDateString('en-IN')}</p></div>
+                    <div className="sm:text-right"><p className="text-xs text-gray-400 uppercase tracking-wider mb-1">Moved Out</p><p className="font-bold text-gray-700">{new Date(history.move_out_date).toLocaleDateString('en-IN')}</p></div>
                   </div>
                 ))}
               </div>
