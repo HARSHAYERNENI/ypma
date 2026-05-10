@@ -9,7 +9,6 @@ function LoginScreen() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
-  const [isSignUp, setIsSignUp] = useState(false)
 
   const handleAuth = async (e) => {
     e.preventDefault()
@@ -17,15 +16,9 @@ function LoginScreen() {
     const loginEmail = email.includes('@') ? email.trim() : `${email.trim().toLowerCase()}@ypma.com`;
 
     try {
-      if (isSignUp) {
-        const { error } = await supabase.auth.signUp({ email: loginEmail, password })
-        if (error) throw error
-        alert("Account created successfully! You can now sign in.")
-        setIsSignUp(false)
-      } else {
-        const { error } = await supabase.auth.signInWithPassword({ email: loginEmail, password })
-        if (error) throw error
-      }
+      // ONLY Login logic remains. No sign-ups allowed from the frontend.
+      const { error } = await supabase.auth.signInWithPassword({ email: loginEmail, password })
+      if (error) throw error
     } catch (error) {
       alert("Auth Error: " + error.message)
     } finally {
@@ -44,7 +37,7 @@ function LoginScreen() {
         <form onSubmit={handleAuth} className="space-y-6">
           <div>
             <label className="block text-xs text-yvv-cyan uppercase tracking-wider mb-2 font-bold">Username or Email</label>
-            <input type="text" required value={email} onChange={(e) => setEmail(e.target.value)} className="w-full bg-yvv-charcoalDark border border-gray-700 rounded p-3 text-white outline-none focus:border-yvv-cyan transition-colors" placeholder="e.g., admin or annapoorna" />
+            <input type="text" required value={email} onChange={(e) => setEmail(e.target.value)} className="w-full bg-yvv-charcoalDark border border-gray-700 rounded p-3 text-white outline-none focus:border-yvv-cyan transition-colors" placeholder="e.g., user" />
           </div>
           <div>
             <label className="block text-xs text-yvv-cyan uppercase tracking-wider mb-2 font-bold">Password</label>
@@ -52,15 +45,9 @@ function LoginScreen() {
           </div>
           
           <button type="submit" disabled={loading} className="w-full py-3 bg-yvv-cyan text-yvv-charcoalDark font-bold rounded-lg hover:brightness-110 transition-all shadow-[0_0_15px_rgba(34,211,238,0.2)] disabled:opacity-50">
-            {loading ? 'Authenticating...' : (isSignUp ? 'Create Account' : 'Secure Login')}
+            {loading ? 'Authenticating...' : 'Secure Login'}
           </button>
         </form>
-
-        <div className="mt-6 text-center">
-          <button onClick={() => setIsSignUp(!isSignUp)} className="text-sm text-gray-500 hover:text-yvv-cyan transition-colors">
-            {isSignUp ? "Already have an account? Sign In" : "Need access? Create Account"}
-          </button>
-        </div>
       </div>
     </div>
   )
@@ -182,8 +169,6 @@ function Dashboard({ isAdmin, displayName }) {
 
   return (
     <div className="min-h-screen bg-yvv-charcoalDark text-gray-200 p-4 md:p-8 font-sans">
-      {/* TWEAK 1: Dynamic p-4 to p-8 for mobile vs desktop padding */}
-      {/* TWEAK 2: Header uses flex-col on mobile and flex-row on desktop so buttons don't collide */}
       <header className="mb-8 border-b border-yvv-charcoal pb-4 flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
         <div>
           <h1 className="text-3xl font-bold text-yvv-cyan tracking-widest flex items-center gap-2">
@@ -397,7 +382,6 @@ function WaterBilling({ isAdmin }) {
 
   return (
     <div className="min-h-screen bg-yvv-charcoalDark text-gray-200 p-4 md:p-8 font-sans pb-24">
-      {/* TWEAK 1: Dynamic p-4 to p-8 for mobile vs desktop padding */}
       <div className="max-w-6xl mx-auto">
         <button onClick={() => navigate('/')} className="text-gray-400 hover:text-yvv-cyan transition-colors mb-6 flex items-center gap-2 font-semibold"><span>←</span> Back to Dashboard</button>
         <h1 className="text-2xl md:text-3xl font-bold text-white mb-8 border-b border-gray-700 pb-4">WATER READING & BILLING</h1>
@@ -629,7 +613,6 @@ function UnitDetail() {
 
   return (
     <div className="min-h-screen bg-[#e5e7eb] text-gray-900 p-4 md:p-8 font-sans pb-24">
-      {/* TWEAK 1: Dynamic p-4 to p-8 for mobile vs desktop padding */}
       <div className="max-w-5xl mx-auto">
         <button onClick={() => navigate('/')} className="text-gray-600 hover:text-black transition-colors mb-6 flex items-center gap-2 font-bold"><span>←</span> Back to Dashboard</button>
 
@@ -644,13 +627,12 @@ function UnitDetail() {
           </div>
         )}
 
-        {/* TWEAK 2: Header uses flex-col on mobile and flex-row on desktop */}
         <header className="mb-6 bg-white p-4 md:p-6 rounded shadow-sm border-t-4 border-gray-400 flex flex-col md:flex-row justify-between items-start gap-4">
           <div className="flex gap-4 md:gap-6 items-center">
              <div className="w-16 h-16 md:w-24 md:h-24 bg-gray-200 rounded flex items-center justify-center text-gray-400 text-2xl">🏢</div>
              <div>
                <p className="text-xs text-gray-500 uppercase font-bold tracking-widest">{unit.properties?.name}</p>
-               <h1 className="text-3xl md:text-4xl font-bold text-gray-900 mb-1">FLAT {unit.unit_number}</h1>
+               <h1 className="text-3xl md:text-4xl font-bold text-gray-900 mb-1">{unit.unit_number}</h1>
                <div className={`inline-block px-3 py-1 rounded text-xs font-bold ${unit.is_occupied ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>{unit.is_occupied ? 'OCCUPIED' : 'VACANT'}</div>
              </div>
           </div>
@@ -730,7 +712,6 @@ function UnitDetail() {
 
         <div className="bg-white p-6 rounded shadow-sm border border-gray-200 mb-6">
           <div className="flex justify-between items-center mb-4 border-b pb-2"><h2 className="text-lg font-bold text-gray-800">Financials & Current Month Ledger</h2>{!editMode.financial && <button onClick={() => setEditMode({...editMode, financial: true})} className="text-blue-600 text-sm hover:underline">✎ Edit Financials</button>}</div>
-          {/* TWEAK 3: Grid uses lg:grid-cols-2 to stack beautifully on iPads and phones */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8">
             <div>
               {editMode.financial ? (
